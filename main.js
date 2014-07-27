@@ -255,6 +255,11 @@ clients.forEach(function (client) {
         case 'version':
           client.send(event.channel, 'node-np v' + VERSION + ' (standalone last.fm bot written in node.js) - Source: https://github.com/omnidan/node-np');
           break;
+        case 'issue':
+        case 'issues':
+        case 'bug':
+          client.send(event.channel, 'Please file issue requests here: https://github.com/omnidan/node-np/issues');
+          break;
         case 'strip':
           client.send(event.channel, '*takes off its clothes* I\'m running on node v' + process.versions.node + ' with v8 v' + process.versions.v8);
           break;
