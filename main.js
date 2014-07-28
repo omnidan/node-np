@@ -2,7 +2,7 @@
 
 var log = require('log-simple')({init: false});
 
-var VERSION = '0.4.0';
+var VERSION = '0.4.1';
 /* TODO
  * If track genres not found, show artist genres (+0.0.1)
  * Connect to new networks, join channels, etc.. without restarting (+0.1.0)
@@ -128,9 +128,10 @@ clients.forEach(function (client) {
                   str += '\x037\x02' + track.name + '\x02\x03';
 
                   if (track.userloved && (track.userloved !== '0')) str += ' [\x0304<3\x03 - ';
-                  else str += ' [';
+                  else if (track.userplaycount) str += ' [';
 
                   if (track.userplaycount) str += 'playcount \x02' + track.userplaycount + 'x\x02]';
+                  else if (track.userloved && (track.userloved !== '0')) str += 'playcount \x020x\x02]'; // this shouldn't happen unless the user loves a track with no plays (and who would do that?)
 
                   if (track.toptags) {
                     var tags = (track.toptags instanceof Array) ? track.toptags : [track.toptags];
