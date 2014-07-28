@@ -2,9 +2,9 @@
 
 var log = require('log-simple')({init: false});
 
-var VERSION = '0.4.1';
+var VERSION = '0.4.2';
 /* TODO
- * If track genres not found, show artist genres (+0.0.1)
+ * If track genres not found, show album/artist genres (+0.0.1)
  * Connect to new networks, join channels, etc.. without restarting (+0.1.0)
  * Show when the last played track was played (+0.0.1)
  * Change logging to log-simple and log more stuff (+0.0.1)
@@ -123,7 +123,7 @@ clients.forEach(function (client) {
 
                   if (track.artist && track.artist.name) str += '\x037\x02' + track.artist.name + '\x02\x03 - ';
 
-                  if (track.album && track.album.name) str += '\x037\x02' + track.album.name + '\x02\x03 - ';
+                  if (track.album && track.album.title) str += '\x037\x02' + track.album.title + '\x02\x03 - ';
 
                   str += '\x037\x02' + track.name + '\x02\x03';
 
