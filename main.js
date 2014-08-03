@@ -52,6 +52,10 @@ clients.forEach(function (client) {
   client.user(client.config.nick, client.config.nick);
 
   client.on('motd', function (motd) {
+    if (client.config && client.config.nickserv) {
+      client.send('NickServ', 'IDENTIFY ' + client.config.nickserv);
+    }
+
     client.join(client.config.channels);
   });
 
