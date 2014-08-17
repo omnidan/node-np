@@ -173,61 +173,81 @@ function getRecentTrack(nick, callback) {
   });
 }
 
-function isAdmin(event) {
-  return network_config[event.network] && network_config[event.network].admin && (event.user.getNick() == network_config[event.network].admin);
+function isAdmin(event, callback) {
+  if (!callback) return;
+  if (network_config[event.network] && network_config[event.network].admin) {
+    var admin = network_config[event.network].admin;
+    if (network_config[event.network].adminNickServ) {
+      client.whois(event.user.getNick(), function(err, res) {
+        if (!res) callback(false);
+        else {
+          var user = res.account;
+          if (!user) callback(false);
+          else callback((admin instanceof Array) ? (admin.indexOf(user) > -1) : user === admin);
+        }
+      });
+    } else {
+      var user = event.user.getNick();
+      callback((admin instanceof Array) ? (admin.indexOf(user) > -1) : user === admin);
+    }
+  } else {
+    callback(false);
+  }
 }
 
 client.on('privatemessage', function(event) {
   var args = event.message.split(' ');
 
   // admin commands
-  if (isAdmin(event)) {
-    switch (args[0]) {
-      case 'dump':
-        client.send(event.user, db.dump());
-        break;
-      case 'flush':
-        db.flush(function(err) {
-          if (err) client.send(event.user, 'Error: ' + JSON.stringify(err));
-          else client.send(event.user, 'done');
-        });
-        break;
-      case 'count':
-        client.send(event.user, JSON.stringify(db.count()));
-        break;
-      case 'del':
-        if (args.length >= 2) {
-          db.del(args[1]);
-          db.flush();
-          client.send(event.user, 'done');
-        } else client.send(event.user, 'needs more arguments');
-        break;
-      case 'get':
-        if (args.length >= 2) {
-          client.send(event.user, args[1] + ': ' + db.get(args[1]));
-        } else client.send(event.user, 'needs more arguments');
-        break;
-      case 'set':
-        if (args.length >= 3) {
-          db.set(args[1], args[2]);
-          db.flush();
-          client.send(event.user, 'done');
-        } else client.send(event.user, 'needs more arguments');
-        break;
-      case 'reload':
-        client.send(event.user, 'wip'); // TODO
-        break;
-      case 'wp':
-        var dbdump = db.dumpRaw();
-        for (var key in db.dumpRaw()) {
-          np(event.user, key);
-        }
-        break;
-      default:
-        client.send(event.user, 'I don\'t understand you');
-        break;
+  isAdmin(event, function (admin) {
+    if (admin) {
+      switch (args[0]) {
+        case 'dump':
+          client.send(event.user, db.dump());
+          break;
+        case 'flush':
+          db.flush(function(err) {
+            if (err) client.send(event.user, 'Error: ' + JSON.stringify(err));
+            else client.send(event.user, 'done');
+          });
+          break;
+        case 'count':
+          client.send(event.user, JSON.stringify(db.count()));
+          break;
+        case 'del':
+          if (args.length >= 2) {
+            db.del(args[1]);
+            db.flush();
+            client.send(event.user, 'done');
+          } else client.send(event.user, 'needs more arguments');
+          break;
+        case 'get':
+          if (args.length >= 2) {
+            client.send(event.user, args[1] + ': ' + db.get(args[1]));
+          } else client.send(event.user, 'needs more arguments');
+          break;
+        case 'set':
+          if (args.length >= 3) {
+            db.set(args[1], args[2]);
+            db.flush();
+            client.send(event.user, 'done');
+          } else client.send(event.user, 'needs more arguments');
+          break;
+        case 'reload':
+          client.send(event.user, 'wip'); // TODO
+          break;
+        case 'wp':
+          var dbdump = db.dumpRaw();
+          for (var key in db.dumpRaw()) {
+            np(event.user, key);
+          }
+          break;
+        default:
+          client.send(event.user, 'I don\'t understand you');
+          break;
+      }
     }
-  }
+  });
 });
 
 function np(to, nick) {
@@ -284,13 +304,15 @@ client.on('message', function(event) {
         }
         break;
       case 'wp':
-        if (isAdmin(event)) {
-          client.send(event.channel, event.user.getNick() + ' ;)');
-          var dbdump = db.dumpRaw();
-          for (var key in db.dumpRaw()) {
-            np(event.user, key);
+        isAdmin(event, function (admin) {
+          if (admin) {
+            client.send(event.channel, event.user.getNick() + ' ;)');
+            var dbdump = db.dumpRaw();
+            for (var key in db.dumpRaw()) {
+              np(event.user, key);
+            }
           }
-        }
+        });
         break;
       case 'compare':
         if (args.length > 2) {
