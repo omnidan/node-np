@@ -2,7 +2,7 @@
 
 var log = require('log-simple')();
 
-var VERSION = '0.5.0';
+var VERSION = '0.5.1';
 /* TODO
  * If track genres not found, show album/artist genres (+0.0.1)
  * Connect to new networks, join channels, etc.. without restarting (+0.1.0)
@@ -239,7 +239,7 @@ client.on('privatemessage', function(event) {
         case 'wp':
           var dbdump = db.dumpRaw();
           for (var key in db.dumpRaw()) {
-            np(event.user, key);
+            np(event.user, key, true);
           }
           break;
         default:
@@ -250,11 +250,11 @@ client.on('privatemessage', function(event) {
   });
 });
 
-function np(to, nick) {
+function np(to, nick, wp) {
   var resolved_nick = db.get(nick, nick);
   if (resolved_nick == nick) db.set(nick, nick); // store this nick for wp command
   getRecentTrack(resolved_nick, function(msg) {
-    client.send(to, msg);
+    client.send(to, wp ? '[' + client.format.bold + nick + client.format.bold + '] ' + msg : msg);
   });
 }
 
@@ -309,7 +309,7 @@ client.on('message', function(event) {
             client.send(event.channel, event.user.getNick() + ' ;)');
             var dbdump = db.dumpRaw();
             for (var key in db.dumpRaw()) {
-              np(event.user, key);
+              np(event.user, key, true);
             }
           }
         });
