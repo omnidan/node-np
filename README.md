@@ -32,11 +32,16 @@ the example below. More networks can be added. (Config is JSON format)
       "channels": ["#lounge"],
       "nick": "np",
       "admin": "dan",
+      "adminNickServ": false,
       "prefix": "."
     }
   ]
 }
 ```
+
+Setting `adminNickServ` to `true` will do a whois and check the nickserv account of the user.
+
+As of 0.5, `admin` can be an array too, so you can specify multiple admins for node-np.
 
 
 Running
