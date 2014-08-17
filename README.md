@@ -21,13 +21,15 @@ Install dependencies: Run `npm install` in the node-np directory.
 Configuration
 -------------
 
+*NOTE*: In 0.5 `address` is now called `host` to work with the new coffea library.
+
 Now create a `config.json` file in the node-np directory. It should look like
 the example below. More networks can be added. (Config is JSON format)
 ```
 {
   "networks": [
     {
-      "address": "localhost",
+      "host": "localhost",
       "port": 6667,
       "channels": ["#lounge"],
       "nick": "np",
