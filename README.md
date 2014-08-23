@@ -37,13 +37,16 @@ the example below. More networks can be added. (Config is JSON format)
       "adminNickServ": false,
       "prefix": "."
     }
-  ]
+  ],
+  "maxTags": 4
 }
 ```
 
 Setting `adminNickServ` to `true` will do a whois and check the nickserv account of the user.
 
 As of 0.5, `admin` can be an array too, so you can specify multiple admins for node-np.
+
+As of 0.5.2, you can set `maxTags`, which limits the amount of tags that will be shown. Default: 4
 
 
 Running

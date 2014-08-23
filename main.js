@@ -2,7 +2,7 @@
 
 var log = require('log-simple')();
 
-var VERSION = '0.5.1';
+var VERSION = '0.5.2';
 /* TODO
  * Connect to new networks, join channels, etc.. without restarting (+0.1.0)
  * Show when the last played track was played (+0.0.1)
@@ -21,6 +21,17 @@ if (config && config.apikey) APIKEY = config.apikey;
 else APIKEY = '4c563adf68bc357a4570d3e7986f6481';
 
 log.setDebug(false);
+var maxTags = 4;
+
+if (config) {
+  if (config.debug) {
+    log.setDebug(config.debug);
+  }
+  if (config.tags) {
+    if (typeof config.tags === 'number') maxTags = config.tags;
+  }
+}
+
 
 var client = require('coffea')(),
     net    = require('net'),
@@ -116,20 +127,14 @@ function parseTrackInfo(track, now_playing, nick, callback) {
 
   if (track.toptags) {
     var tags = (track.toptags instanceof Array) ? track.toptags : [track.toptags];
-    for (var i=0; i < tags.length; i++) {
-      if (tags[i].tag && tags[i].tag.name) {
-        if (i === 0) str += ' (';
-
-        str += client.format.teal + client.format.bold + tags[i].tag.name + client.format.reset;
-
-        if (i != tags.length-1) str += ', ';
-        else str += ')';
-      } else if (tags[i].name) {
+    var max = (tags.length < maxTags) ? tags.length : maxTags;
+    for (var i=0; i < max; i++) {
+      if (tags[i] && tags[i].name) {
         if (i === 0) str += ' (';
 
         str += client.format.teal + client.format.bold + tags[i].name + client.format.reset;
 
-        if (i != tags.length-1) str += ', ';
+        if (i != max-1) str += ', ';
         else str += ')';
       }
     }
@@ -158,7 +163,13 @@ function getArtistTags(track, now_playing, nick, callback) {
     autocorrect: 1,
     handlers: {
       success: function (data) {
-        var tags = (data.toptags.tag instanceof Array) ? data.toptags.tag : [data.track.toptags];
+        var tags;
+        if (data.track.toptags && data.track.toptags.tag) {
+          tags = (data.toptags.tag instanceof Array) ? data.toptags.tag : [data.track.toptags];
+        } else {
+          tags = [];
+        }
+
         if (tags.length > 0) {
           track.toptags = tags;
           parseTrackInfo(track, now_playing, nick, callback);
@@ -180,7 +191,13 @@ function getAlbumTags(track, now_playing, nick, callback) {
     autocorrect: 1,
     handlers: {
       success: function (data) {
-        var tags = (data.toptags.tag instanceof Array) ? data.toptags.tag : [data.track.toptags];
+        var tags;
+        if (data.track.toptags && data.track.toptags.tag) {
+          tags = (data.toptags.tag instanceof Array) ? data.toptags.tag : [data.track.toptags];
+        } else {
+          tags = [];
+        }
+
         if (tags.length > 0) {
           track.toptags = tags;
           parseTrackInfo(track, now_playing, nick, callback);
@@ -214,8 +231,8 @@ function getRecentTrack(nick, callback) {
             handlers: {
               success: function (data) {
                 var tags;
-                if (data.track.toptags instanceof Array) {
-                  tags = data.track.toptags;
+                if (data.track.toptags && data.track.toptags.tag && (data.track.toptags.tag instanceof Array)) {
+                  tags = data.track.toptags.tag;
                 } else {
                   var tag = data.track.toptags.trim().replace('\\n', '');
                   if ((typeof tag === 'string') && (tag.length > 0)) tags = [tag];
@@ -223,7 +240,7 @@ function getRecentTrack(nick, callback) {
                 }
 
                 if (tags.length > 0) {
-                  log.debug(tags);
+                  data.track.toptags = tags;
                   parseTrackInfo(data.track, now_playing, nick, callback);
                 } else {
                   if (data.album) {
