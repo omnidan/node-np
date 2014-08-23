@@ -4,7 +4,6 @@ var log = require('log-simple')();
 
 var VERSION = '0.5.1';
 /* TODO
- * If track genres not found, show album/artist genres (+0.0.1)
  * Connect to new networks, join channels, etc.. without restarting (+0.1.0)
  * Show when the last played track was played (+0.0.1)
  * Change logging to log-simple and log more stuff (+0.0.1)
@@ -20,6 +19,8 @@ var DBCONFIG = {
 var config = require('./config.json');
 if (config && config.apikey) APIKEY = config.apikey;
 else APIKEY = '4c563adf68bc357a4570d3e7986f6481';
+
+log.setDebug(false);
 
 var client = require('coffea')(),
     net    = require('net'),
@@ -92,6 +93,110 @@ function compareUsers(nick1, nick2, callback) {
   });
 }
 
+function parseTrackInfo(track, now_playing, nick, callback) {
+  var str;
+
+  if (now_playing) {
+    str = '\'' + client.format.bold + nick + client.format.bold + '\' is now playing: ';
+  } else {
+    str = '\'' + client.format.bold + nick + client.format.bold + '\' is not listening to anything right now. The last played track was: ';
+  }
+
+  if (track.artist && track.artist.name) str += client.format.olive + client.format.bold + track.artist.name + client.format.reset + ' - ';
+
+  if (track.album && track.album.title) str += client.format.olive + client.format.bold + track.album.title + client.format.reset + ' - ';
+
+  str += client.format.olive + client.format.bold + track.name + client.format.reset;
+
+  if (track.userloved && (track.userloved !== '0')) str += ' [' + client.format.red + '<3' + client.format.normal + ' - ';
+  else if (track.userplaycount) str += ' [';
+
+  if (track.userplaycount) str += 'playcount ' + client.format.bold + track.userplaycount + 'x' + client.format.bold + ']';
+  else if (track.userloved && (track.userloved !== '0')) str += 'playcount ' + client.format.bold + '0x' + client.format.bold + ']'; // this shouldn't happen unless the user loves a track with no plays (and who would do that?)
+
+  if (track.toptags) {
+    var tags = (track.toptags instanceof Array) ? track.toptags : [track.toptags];
+    for (var i=0; i < tags.length; i++) {
+      if (tags[i].tag && tags[i].tag.name) {
+        if (i === 0) str += ' (';
+
+        str += client.format.teal + client.format.bold + tags[i].tag.name + client.format.reset;
+
+        if (i != tags.length-1) str += ', ';
+        else str += ')';
+      } else if (tags[i].name) {
+        if (i === 0) str += ' (';
+
+        str += client.format.teal + client.format.bold + tags[i].name + client.format.reset;
+
+        if (i != tags.length-1) str += ', ';
+        else str += ')';
+      }
+    }
+  }
+
+  if (track.duration) {
+    var secs = (track.duration / 1000); // ms to sec
+    var mins = Math.floor(secs / 60); // sec to min
+    secs = Math.round(((secs / 60) - mins) * 60); // remaining seconds
+    str += ' [' + client.format.olive + client.format.bold;
+    if (mins < 10) str += '0';
+    str += mins + ':';
+    if (secs < 10) str += '0';
+    str += secs;
+    str += client.format.reset + ']';
+  }
+
+  callback(str);
+}
+
+function getArtistTags(track, now_playing, nick, callback) {
+  log.debug('getting artist tags');
+  lastfm.request('artist.getTopTags', {
+    mbid: track.artist.mbid,
+    artist: track.artist.name,
+    autocorrect: 1,
+    handlers: {
+      success: function (data) {
+        var tags = (data.toptags.tag instanceof Array) ? data.toptags.tag : [data.track.toptags];
+        if (tags.length > 0) {
+          track.toptags = tags;
+          parseTrackInfo(track, now_playing, nick, callback);
+        } else {
+          parseTrackInfo(track, now_playing, nick, callback); // no tags
+        }
+      },
+      error: function (err) {
+        parseTrackInfo(track, now_playing, nick, callback); // no tags
+      }
+    }
+  });
+}
+
+function getAlbumTags(track, now_playing, nick, callback) {
+  log.debug('getting album tags', track, track.album);
+  lastfm.request('album.getTopTags', {
+    mbid: track.album.mbid,
+    autocorrect: 1,
+    handlers: {
+      success: function (data) {
+        var tags = (data.toptags.tag instanceof Array) ? data.toptags.tag : [data.track.toptags];
+        if (tags.length > 0) {
+          track.toptags = tags;
+          parseTrackInfo(track, now_playing, nick, callback);
+        } else {
+          // get tags from artist
+          getArtistTags(track, now_playing, nick, callback);
+        }
+      },
+      error: function (err) {
+        // get tags from artist
+        getArtistTags(track, now_playing, nick, callback);
+      }
+    }
+  });
+}
+
 function getRecentTrack(nick, callback) {
   lastfm.request('user.getRecentTracks', {
     user: nick,
@@ -108,53 +213,27 @@ function getRecentTrack(nick, callback) {
             username: nick,
             handlers: {
               success: function (data) {
-                var str, track = data.track;
-
-                if (now_playing) {
-                  str = '\'' + client.format.bold + nick + client.format.bold + '\' is now playing: ';
+                var tags;
+                if (data.track.toptags instanceof Array) {
+                  tags = data.track.toptags;
                 } else {
-                  str = '\'' + client.format.bold + nick + client.format.bold + '\' is not listening to anything right now. The last played track was: ';
+                  var tag = data.track.toptags.trim().replace('\\n', '');
+                  if ((typeof tag === 'string') && (tag.length > 0)) tags = [tag];
+                  else tags = [];
                 }
 
-                if (track.artist && track.artist.name) str += client.format.olive + client.format.bold + track.artist.name + client.format.reset + ' - ';
-
-                if (track.album && track.album.title) str += client.format.olive + client.format.bold + track.album.title + client.format.reset + ' - ';
-
-                str += client.format.olive + client.format.bold + track.name + client.format.reset;
-
-                if (track.userloved && (track.userloved !== '0')) str += ' [' + client.format.red + '<3' + client.format.normal + ' - ';
-                else if (track.userplaycount) str += ' [';
-
-                if (track.userplaycount) str += 'playcount ' + client.format.bold + track.userplaycount + 'x' + client.format.bold + ']';
-                else if (track.userloved && (track.userloved !== '0')) str += 'playcount ' + client.format.bold + '0x' + client.format.bold + ']'; // this shouldn't happen unless the user loves a track with no plays (and who would do that?)
-
-                if (track.toptags) {
-                  var tags = (track.toptags instanceof Array) ? track.toptags : [track.toptags];
-                  for (var i=0; i < tags.length; i++) {
-                    if (tags[i].tag && tags[i].tag.name) {
-                      if (i === 0) str += ' (';
-
-                      str += client.format.teal + client.format.bold + tags[i].tag.name + client.format.reset;
-
-                      if (i != tags.length-1) str += ', ';
-                      else str += ')';
-                    }
+                if (tags.length > 0) {
+                  log.debug(tags);
+                  parseTrackInfo(data.track, now_playing, nick, callback);
+                } else {
+                  if (data.album) {
+                    // get tags from album
+                    getAlbumTags(data.track, now_playing, nick, callback);
+                  } else {
+                    // get tags from artist
+                    getArtistTags(data.track, now_playing, nick, callback);
                   }
                 }
-
-                if (track.duration) {
-                  var secs = (track.duration / 1000); // ms to sec
-                  var mins = Math.floor(secs / 60); // sec to min
-                  secs = Math.round(((secs / 60) - mins) * 60); // remaining seconds
-                  str += ' [' + client.format.olive + client.format.bold;
-                  if (mins < 10) str += '0';
-                  str += mins + ':';
-                  if (secs < 10) str += '0';
-                  str += secs;
-                  str += client.format.reset + ']';
-                }
-
-                callback(str);
               },
               error: function (err) {
                 callback(err.message);
