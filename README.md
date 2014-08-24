@@ -38,9 +38,12 @@ the example below. More networks can be added. (Config is JSON format)
       "prefix": "."
     }
   ],
-  "maxTags": 4
+  "maxTags": 4,
+  "debug": false
 }
 ```
+
+If something doesn't work, please set `debug` to `true` and include the logs in your bug report.
 
 Setting `adminNickServ` to `true` will do a whois and check the nickserv account of the user.
 

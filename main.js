@@ -2,10 +2,9 @@
 
 var log = require('log-simple')();
 
-var VERSION = '0.5.3';
+var VERSION = '0.5.4';
 /* TODO
  * Connect to new networks, join channels, etc.. without restarting (+0.1.0)
- * Change logging to log-simple and log more stuff (+0.0.1)
  * Better NPM integration, publish on NPM (+0.0.1)
  */
 log.info('node-np v' + VERSION);
@@ -15,6 +14,7 @@ var DBCONFIG = {
   file: 'mappings.json'
 };
 
+// configuration
 var config = require('./config.json');
 if (config && config.apikey) APIKEY = config.apikey;
 else APIKEY = '4c563adf68bc357a4570d3e7986f6481';
@@ -30,8 +30,9 @@ if (config) {
     if (typeof config.tags === 'number') maxTags = config.tags;
   }
 }
+log.debug('successfully loaded configuration');
 
-
+// irc client setup
 var client = require('coffea')(),
     net    = require('net'),
     db     = require('./db_' + DBCONFIG.driver)(DBCONFIG);
@@ -39,6 +40,7 @@ var client = require('coffea')(),
 var network_config = {};
 config.networks.forEach(function (network) {
   var id = client.add(network);
+  log.debug('connecting to network ' + id + ':', JSON.stringify(network));
   network_config[id] = network;
 });
 
@@ -49,13 +51,16 @@ var LastFmNode = require('lastfm').LastFmNode;
 var lastfm = new LastFmNode({
   api_key: APIKEY
 });
+log.debug('using last.fm API with key:', APIKEY);
 
 client.on('motd', function (event) {
   if (network_config[event.network] && network_config[event.network].nickserv) {
+    log.debug('identifying with NickServ on network ' + event.network + ':', JSON.stringify(network_config[event.network].nickserv));
     client.send('NickServ', 'IDENTIFY ' + network_config[event.network].nickserv, event.network);
   }
 
   if (network_config[event.network] && network_config[event.network].channels) {
+    log.debug('joining channels on network ' + event.network + ':', JSON.stringify(network_config[event.network].channels));
     client.join(network_config[event.network].channels, event.network);
   }
 });
