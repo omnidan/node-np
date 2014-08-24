@@ -2,10 +2,9 @@
 
 var log = require('log-simple')();
 
-var VERSION = '0.5.2';
+var VERSION = '0.5.3';
 /* TODO
  * Connect to new networks, join channels, etc.. without restarting (+0.1.0)
- * Show when the last played track was played (+0.0.1)
  * Change logging to log-simple and log more stuff (+0.0.1)
  * Better NPM integration, publish on NPM (+0.0.1)
  */
@@ -104,13 +103,13 @@ function compareUsers(nick1, nick2, callback) {
   });
 }
 
-function parseTrackInfo(track, now_playing, nick, callback) {
+function parseTrackInfo(track, nick, callback) {
   var str;
 
-  if (now_playing) {
+  if (track.now_playing) {
     str = '\'' + client.format.bold + nick + client.format.bold + '\' is now playing: ';
   } else {
-    str = '\'' + client.format.bold + nick + client.format.bold + '\' is not listening to anything right now. The last played track was: ';
+    str = '\'' + client.format.bold + nick + client.format.bold + '\' is not listening to anything right now. The last played track (on ' + track.date + ' UTC) was: ';
   }
 
   if (track.artist && track.artist.name) str += client.format.olive + client.format.bold + track.artist.name + client.format.reset + ' - ';
@@ -155,7 +154,7 @@ function parseTrackInfo(track, now_playing, nick, callback) {
   callback(str);
 }
 
-function getArtistTags(track, now_playing, nick, callback) {
+function getArtistTags(track, nick, callback) {
   log.debug('getting artist tags');
   lastfm.request('artist.getTopTags', {
     mbid: track.artist.mbid,
@@ -172,19 +171,19 @@ function getArtistTags(track, now_playing, nick, callback) {
 
         if (tags.length > 0) {
           track.toptags = tags;
-          parseTrackInfo(track, now_playing, nick, callback);
+          parseTrackInfo(track, nick, callback);
         } else {
-          parseTrackInfo(track, now_playing, nick, callback); // no tags
+          parseTrackInfo(track, nick, callback); // no tags
         }
       },
       error: function (err) {
-        parseTrackInfo(track, now_playing, nick, callback); // no tags
+        parseTrackInfo(track, nick, callback); // no tags
       }
     }
   });
 }
 
-function getAlbumTags(track, now_playing, nick, callback) {
+function getAlbumTags(track, nick, callback) {
   log.debug('getting album tags', track, track.album);
   lastfm.request('album.getTopTags', {
     mbid: track.album.mbid,
@@ -200,15 +199,15 @@ function getAlbumTags(track, now_playing, nick, callback) {
 
         if (tags.length > 0) {
           track.toptags = tags;
-          parseTrackInfo(track, now_playing, nick, callback);
+          parseTrackInfo(track, nick, callback);
         } else {
           // get tags from artist
-          getArtistTags(track, now_playing, nick, callback);
+          getArtistTags(track, nick, callback);
         }
       },
       error: function (err) {
         // get tags from artist
-        getArtistTags(track, now_playing, nick, callback);
+        getArtistTags(track, nick, callback);
       }
     }
   });
@@ -223,6 +222,7 @@ function getRecentTrack(nick, callback) {
         if (data.recenttracks.hasOwnProperty('track')) {
           var track = (data.recenttracks.track instanceof Array) ? data.recenttracks.track[0] : data.recenttracks.track;
           var now_playing = track.hasOwnProperty('@attr') && track['@attr'].nowplaying === 'true';
+          var date = (track.date && track.date['#text']) ? track.date['#text'] : undefined; 
           lastfm.request('track.getInfo', {
             mbid: track.mbid,
             track: track.name,
@@ -230,6 +230,9 @@ function getRecentTrack(nick, callback) {
             username: nick,
             handlers: {
               success: function (data) {
+                data.track.date = date;
+                data.track.now_playing = now_playing;
+
                 var tags;
                 if (data.track.toptags && data.track.toptags.tag && (data.track.toptags.tag instanceof Array)) {
                   tags = data.track.toptags.tag;
@@ -241,14 +244,14 @@ function getRecentTrack(nick, callback) {
 
                 if (tags.length > 0) {
                   data.track.toptags = tags;
-                  parseTrackInfo(data.track, now_playing, nick, callback);
+                  parseTrackInfo(data.track, nick, callback);
                 } else {
                   if (data.album) {
                     // get tags from album
-                    getAlbumTags(data.track, now_playing, nick, callback);
+                    getAlbumTags(data.track, nick, callback);
                   } else {
                     // get tags from artist
-                    getArtistTags(data.track, now_playing, nick, callback);
+                    getArtistTags(data.track, nick, callback);
                   }
                 }
               },
