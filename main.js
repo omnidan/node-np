@@ -2,7 +2,7 @@
 
 var log = require('log-simple')();
 
-var VERSION = '0.5.4';
+var VERSION = '0.5.5';
 /* TODO
  * Connect to new networks, join channels, etc.. without restarting (+0.1.0)
  * Better NPM integration, publish on NPM (+0.0.1)
@@ -168,8 +168,8 @@ function getArtistTags(track, nick, callback) {
     handlers: {
       success: function (data) {
         var tags;
-        if (data.track.toptags && data.track.toptags.tag) {
-          tags = (data.toptags.tag instanceof Array) ? data.toptags.tag : [data.track.toptags];
+        if (data.toptags && data.toptags.tag) {
+          tags = (data.toptags.tag instanceof Array) ? data.toptags.tag : [data.toptags];
         } else {
           tags = [];
         }
@@ -182,6 +182,8 @@ function getArtistTags(track, nick, callback) {
         }
       },
       error: function (err) {
+        log.debug('getArtistTags error:', err);
+        log.debug('you can probably ignore this error above, this track has no tags.');
         parseTrackInfo(track, nick, callback); // no tags
       }
     }
@@ -196,8 +198,8 @@ function getAlbumTags(track, nick, callback) {
     handlers: {
       success: function (data) {
         var tags;
-        if (data.track.toptags && data.track.toptags.tag) {
-          tags = (data.toptags.tag instanceof Array) ? data.toptags.tag : [data.track.toptags];
+        if (data.toptags && data.toptags.tag) {
+          tags = (data.toptags.tag instanceof Array) ? data.toptags.tag : [data.toptags];
         } else {
           tags = [];
         }
@@ -212,6 +214,8 @@ function getAlbumTags(track, nick, callback) {
       },
       error: function (err) {
         // get tags from artist
+        log.debug('getAlbumTags error:', err);
+        log.debug('you can probably ignore this error above, trying to get tags from artist...');
         getArtistTags(track, nick, callback);
       }
     }
@@ -242,9 +246,12 @@ function getRecentTrack(nick, callback) {
                 if (data.track.toptags && data.track.toptags.tag && (data.track.toptags.tag instanceof Array)) {
                   tags = data.track.toptags.tag;
                 } else {
-                  var tag = data.track.toptags.trim().replace('\\n', '');
-                  if ((typeof tag === 'string') && (tag.length > 0)) tags = [tag];
-                  else tags = [];
+                  if ((typeof data.track.toptags === 'string') && (data.track.toptags.length > 0)) {
+                    var tag = data.track.toptags.trim().replace('\\n', '');
+                    tags = [tag];
+                  } else {
+                    tags = [];
+                  }
                 }
 
                 if (tags.length > 0) {
@@ -261,6 +268,7 @@ function getRecentTrack(nick, callback) {
                 }
               },
               error: function (err) {
+                log.error('getRecentTrack error:', err);
                 callback(err.message);
               }
             }
@@ -355,6 +363,7 @@ client.on('privatemessage', function(event) {
 });
 
 function np(to, nick, wp) {
+  log.debug('np(', to.getName(), ',', nick, ',', wp, ')');
   var resolved_nick = db.get(nick, nick);
   if (resolved_nick == nick) db.set(nick, nick); // store this nick for wp command
   getRecentTrack(resolved_nick, function(msg) {
@@ -363,6 +372,7 @@ function np(to, nick, wp) {
 }
 
 function compare(to, nick1, nick2) {
+  log.debug('compare(', to, ',', nick1, ',', nick2, ')');
   compareUsers(db.get(nick1, nick1), db.get(nick2, nick2), function(msg) {
     client.send(to, msg);
   });
