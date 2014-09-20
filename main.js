@@ -2,7 +2,7 @@
 
 var log = require('log-simple')();
 
-var VERSION = '0.5.5';
+var VERSION = '0.5.6';
 /* TODO
  * Connect to new networks, join channels, etc.. without restarting (+0.1.0)
  * Better NPM integration, publish on NPM (+0.0.1)
@@ -363,12 +363,19 @@ client.on('privatemessage', function(event) {
 });
 
 function np(to, nick, wp) {
-  log.debug('np(', to.getName(), ',', nick, ',', wp, ')');
+  log.debug('np(', wp ? to.getNick() : to.getName(), ',', nick, ',', wp, ')');
   var resolved_nick = db.get(nick, nick);
   if (resolved_nick == nick) db.set(nick, nick); // store this nick for wp command
   getRecentTrack(resolved_nick, function(msg) {
     client.send(to, wp ? '[' + client.format.bold + nick + client.format.bold + '] ' + msg : msg);
   });
+}
+
+function whois(to, nick, wp) {
+  log.debug('whois(', wp ? to.getNick() : to.getName(), ',', nick, ')');
+  var resolved_nick = db.get(nick, nick);
+  if (resolved_nick == nick) db.set(nick, nick); // store this nick for wp command
+  client.send(to, '\'' + client.format.bold + nick + client.format.bold + '\' is \'' + client.format.bold + resolved_nick + client.format.bold + '\' on last.fm: http://last.fm/user/' + resolved_nick);
 }
 
 function compare(to, nick1, nick2) {
@@ -424,6 +431,24 @@ client.on('message', function(event) {
             var dbdump = db.dumpRaw();
             for (var key in db.dumpRaw()) {
               np(event.user, key, true);
+            }
+          }
+        });
+        break;
+      case 'whois':
+        if (args.length > 1) {
+          whois(event.channel, args[1]);
+        } else {
+          whois(event.channel, event.user.getNick());
+        }
+        break;
+      case 'wwhois':
+        isAdmin(event, function (admin) {
+          if (admin) {
+            client.send(event.channel, event.user.getNick() + ' ;)');
+            var dbdump = db.dumpRaw();
+            for (var key in db.dumpRaw()) {
+              whois(event.user, key, true);
             }
           }
         });
