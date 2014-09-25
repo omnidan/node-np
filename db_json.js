@@ -45,8 +45,8 @@ DB_JSON.prototype.load = function(callback) {
           try {
             _this.storage = JSON.parse(data);
             if (callback) callback();
-          } catch (err) {
-            if (callback) callback(err);
+          } catch (err_) {
+            if (callback) callback(err_);
           }
         }
       });
@@ -73,34 +73,34 @@ DB_JSON.prototype.flush = function(callback) {
 
 DB_JSON.prototype.set = function(key, value) {
   this.storage[key.toLowerCase()] = value;
-}
+};
 
 DB_JSON.prototype.get = function(key, default_value) {
   if (default_value) {
     if (!this.exists(key)) return default_value;
   }
   return this.storage[key.toLowerCase()];
-}
+};
 
 DB_JSON.prototype.del = function(key) {
   delete this.storage[key.toLowerCase()];
-}
+};
 
 DB_JSON.prototype.count = function() {
   return Object.keys(this.storage).length;
-}
+};
 
 DB_JSON.prototype.exists = function(key) {
   return key.toLowerCase() in this.storage;
-}
+};
 
 DB_JSON.prototype.dump = function() {
   return JSON.stringify(this.storage);
-}
+};
 
 DB_JSON.prototype.dumpRaw = function() {
   return this.storage;
-}
+};
 
 module.exports = function(config) {
   return new DB_JSON(config);

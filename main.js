@@ -462,6 +462,39 @@ client.on('message', function(event) {
           client.send(event.channel, 'Use "' + client.format.bold + network_config[event.network].prefix + 'compare NICK' + client.format.bold +
             '" or "' + client.format.bold + network_config[event.network].prefix + 'compare NICK1 NICK2' + client.format.bold + '"');
         }
+        break;
+      case 'join': // join #channel (network) (nostore), join #channel (nostore)
+        // TODO: move to function
+        if (args.length > 2) {
+          client.send(event.channel, 'Not implemented yet.'); // TODO: get network from coffea and set to network
+        } else if (args.length > 1) {
+          client.join(args[1]);
+          if (!args[3]) {
+            // TODO: store channel in config
+          }
+        } else {
+          client.send(event.channel, 'Use "' + client.format.bold + network_config[event.network].prefix + 'join #CHANNEL' + client.format.bold +
+            '" or "' + client.format.bold + network_config[event.network].prefix + 'join #CHANNEL NETWORK' + client.format.bold + '"');
+        }
+        break;
+      case 'part': // part #channel (network) (nostore), part #channel (nostore)
+        // TODO: move to function
+        if (args.length > 2) {
+          client.send(event.channel, 'Not implemented yet.'); // TODO: get network from coffea and set to network
+        } else if (args.length > 1) {
+          client.part(args[1]);
+          if (!args[3]) {
+            // TODO: store channel in config
+          }
+        } else {
+          client.send(event.channel, 'Use "' + client.format.bold + network_config[event.network].prefix + 'part #CHANNEL' + client.format.bold +
+            '" or "' + client.format.bold + network_config[event.network].prefix + 'part #CHANNEL NETWORK' + client.format.bold + '"');
+        }
+        break;
+      case 'connect': // connect name network (port) (ssl) (nostore), connect network (port) (ssl) (nostore)
+        break;
+      case 'disconnect': // disconnect name (nostore)
+        break;
     }
   }
 });
