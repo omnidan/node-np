@@ -2,7 +2,7 @@
 
 var log = require('log-simple')();
 
-var VERSION = '0.5.6';
+var VERSION = '0.5.7';
 /* TODO
  * Connect to new networks, join channels, etc.. without restarting (+0.1.0)
  * Better NPM integration, publish on NPM (+0.0.1)
@@ -44,6 +44,27 @@ config.networks.forEach(function (network) {
   network_config[id] = network;
 });
 
+// command line input
+var readline = require('readline'),
+    util = require('util');
+
+var rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout
+});
+
+rl.setPrompt("> ", 2);
+rl.on("line", function(line) {
+    if (line.trim() !== "") console.log(eval('client.' + line));
+    rl.prompt();
+});
+rl.on('close', function() {
+    return process.exit(1);
+});
+rl.on("SIGINT", function() {
+    return process.exit(1);
+});
+
 // bot begins here
 
 var LastFmNode = require('lastfm').LastFmNode;
@@ -63,6 +84,8 @@ client.on('motd', function (event) {
     log.debug('joining channels on network ' + event.network + ':', JSON.stringify(network_config[event.network].channels));
     client.join(network_config[event.network].channels, event.network);
   }
+
+  rl.prompt();
 });
 
 function compareUsers(nick1, nick2, callback) {
