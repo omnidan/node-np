@@ -2,7 +2,7 @@
 
 var log = require('log-simple')();
 
-var VERSION = '0.5.9';
+var VERSION = '0.5.10';
 /* TODO
  * Connect to new networks, join channels, etc.. without restarting (+0.1.0)
  * Better NPM integration, publish on NPM (+0.0.1)
@@ -38,10 +38,13 @@ var client = require('coffea')(),
     db     = require('./db_' + DBCONFIG.driver)(DBCONFIG);
 
 var network_config = {};
+var id = 0;
 config.networks.forEach(function (network) {
-  var id = client.add(network);
+  network.id = "" + id;
+  client.add(network);
   log.debug('connecting to network ' + id + ':', JSON.stringify(network));
   network_config[id] = network;
+  id++;
 });
 
 // command line input
@@ -74,7 +77,7 @@ var lastfm = new LastFmNode({
 });
 log.debug('using last.fm API with key:', APIKEY);
 
-client.on('motd', function (event) {
+client.on('motd', function (err, event) {
   if (network_config[event.network] && network_config[event.network].nickserv) {
     log.debug('identifying with NickServ on network ' + event.network + ':', JSON.stringify(network_config[event.network].nickserv));
     client.send('NickServ', 'IDENTIFY ' + network_config[event.network].nickserv, event.network);
@@ -254,7 +257,7 @@ function getRecentTrack(nick, callback) {
         if (data.recenttracks.hasOwnProperty('track')) {
           var track = (data.recenttracks.track instanceof Array) ? data.recenttracks.track[0] : data.recenttracks.track;
           var now_playing = track.hasOwnProperty('@attr') && track['@attr'].nowplaying === 'true';
-          var date = (track.date && track.date['#text']) ? track.date['#text'] : undefined; 
+          var date = (track.date && track.date['#text']) ? track.date['#text'] : undefined;
           lastfm.request('track.getInfo', {
             mbid: track.mbid,
             track: track.name,
@@ -313,7 +316,7 @@ function isAdmin(event, callback) {
   if (network_config[event.network] && network_config[event.network].admin) {
     var admin = network_config[event.network].admin;
     if (network_config[event.network].adminNickServ) {
-      client.whois(event.user.getNick(), function(err, res) {
+      client.whois(event.user.nick, function(err, res) {
         if (!res) callback(false);
         else {
           var user = res.account;
@@ -322,7 +325,7 @@ function isAdmin(event, callback) {
         }
       });
     } else {
-      var user = event.user.getNick();
+      var user = event.user.nick;
       callback((admin instanceof Array) ? (admin.indexOf(user) > -1) : user === admin);
     }
   } else {
@@ -330,7 +333,7 @@ function isAdmin(event, callback) {
   }
 }
 
-client.on('privatemessage', function(event) {
+client.on('privatemessage', function(err, event) {
   var args = event.message.split(' ');
 
   // admin commands
@@ -386,7 +389,7 @@ client.on('privatemessage', function(event) {
 });
 
 function np(to, nick, wp) {
-  log.debug('np(', wp ? to.getNick() : to.getName(), ',', nick, ',', wp, ')');
+  log.debug('np(', wp ? to.nick : to.name, ',', nick, ',', wp, ')');
   var resolved_nick = db.get(nick, nick);
   if (resolved_nick == nick) db.set(nick, nick); // store this nick for wp command
   getRecentTrack(resolved_nick, function(msg) {
@@ -395,7 +398,7 @@ function np(to, nick, wp) {
 }
 
 function whois(to, nick, wp) {
-  log.debug('whois(', wp ? to.getNick() : to.getName(), ',', nick, ')');
+  log.debug('whois(', wp ? to.nick : to.name, ',', nick, ')');
   var resolved_nick = db.get(nick, nick);
   if (resolved_nick == nick) db.set(nick, nick); // store this nick for wp command
   client.send(to, '\'' + client.format.bold + nick + client.format.bold + '\' is \'' + client.format.bold + resolved_nick + client.format.bold + '\' on last.fm: http://last.fm/user/' + resolved_nick);
@@ -408,9 +411,9 @@ function compare(to, nick1, nick2) {
   });
 }
 
-client.on('message', function(event) {
-  if (event.message.match(/\(np\)/g) || event.message.match(/lastfm:np/g)) np(event.channel, event.user.getNick());
-  if (network_config[event.network] && network_config[event.network].prefix && (event.message.substr(0, 1) == network_config[event.network].prefix)) {
+client.on('message', function(err, event) {
+    if (event.message.match(/\(np\)/g) || event.message.match(/lastfm:np/g)) np(event.channel, event.user.nick);
+    if (network_config[event.network] && network_config[event.network].prefix && (event.message.substr(0, 1) == network_config[event.network].prefix)) {
     var args = event.message.trim().substr(1).split(' ');
 
     // user commands
@@ -429,28 +432,27 @@ client.on('message', function(event) {
         break;
       case 'setuser':
         if (args.length > 1) {
-          db.set(event.user.getNick(), args[1]);
+          db.set(event.user.nick, args[1]);
           db.flush();
-          client.send(event.channel, '\'' + client.format.bold + event.user.getNick() + client.format.bold + '\' is now associated with http://last.fm/user/' + args[1]); // TODO: check if last.fm user exists?
+          client.send(event.channel, '\'' + client.format.bold + event.user.nick + client.format.bold + '\' is now associated with http://last.fm/user/' + args[1]); // TODO: check if last.fm user exists?
         } else {
           client.send(event.channel, network_config[event.network].prefix + 'setuser needs a last.fm username');
         }
         break;
       case 'help':
-        client.send(event.channel, 'I am a last.fm bot. Use "' + client.format.bold + network_config[event.network].prefix + 'setuser LAST_FM_NICK' + client.format.bold + 
+        client.send(event.channel, 'I am a last.fm bot. Use "' + client.format.bold + network_config[event.network].prefix + 'setuser LAST_FM_NICK' + client.format.bold +
           '" to associate your irc nick with your last.fm account. Then run "' + client.format.bold + network_config[event.network].prefix + 'np' + client.format.bold + '"');
         break;
       case 'np':
         if (args.length > 1) {
           np(event.channel, args[1]);
         } else {
-          np(event.channel, event.user.getNick());
+          np(event.channel, event.user.nick);
         }
         break;
       case 'wp':
         isAdmin(event, function (admin) {
           if (admin) {
-            client.send(event.channel, event.user.getNick() + ' ;)');
             var dbdump = db.dumpRaw();
             for (var key in db.dumpRaw()) {
               np(event.user, key, true);
@@ -462,13 +464,13 @@ client.on('message', function(event) {
         if (args.length > 1) {
           whois(event.channel, args[1]);
         } else {
-          whois(event.channel, event.user.getNick());
+          whois(event.channel, event.user.nick);
         }
         break;
       case 'wwhois':
         isAdmin(event, function (admin) {
           if (admin) {
-            client.send(event.channel, event.user.getNick() + ' ;)');
+            client.send(event.channel, event.user.nick + ' ;)');
             var dbdump = db.dumpRaw();
             for (var key in db.dumpRaw()) {
               whois(event.user, key, true);
@@ -480,7 +482,7 @@ client.on('message', function(event) {
         if (args.length > 2) {
           compare(event.channel, args[1], args[2]);
         } else if (args.length > 1) {
-          compare(event.channel, event.user.getNick(), args[1]);
+          compare(event.channel, event.user.nick, args[1]);
         } else {
           client.send(event.channel, 'Use "' + client.format.bold + network_config[event.network].prefix + 'compare NICK' + client.format.bold +
             '" or "' + client.format.bold + network_config[event.network].prefix + 'compare NICK1 NICK2' + client.format.bold + '"');
