@@ -3,6 +3,11 @@ node-np
 
 _standalone last.fm bot written in node.js_
 
+Telegram support
+----------------
+
+The [`telegram` branch](https://github.com/omnidan/node-np/tree/telegram) supports telegram in addition to irc.
+
 
 Requirements
 ------------
