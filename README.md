@@ -3,6 +3,8 @@ node-np
 
 _standalone last.fm bot written in node.js_
 
+__NOTE: This branch uses ES6 proxies, make sure to run your programs with the `--harmony_proxies` flag and ideally on the latest io.js version (that's what I'm testing with): `node --harmony_proxies script.js`__
+
 
 Requirements
 ------------

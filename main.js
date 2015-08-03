@@ -2,7 +2,7 @@
 
 var log = require('log-simple')();
 
-var VERSION = '0.5.10';
+var VERSION = '0.5.10-telegram';
 /* TODO
  * Connect to new networks, join channels, etc.. without restarting (+0.1.0)
  * Better NPM integration, publish on NPM (+0.0.1)
@@ -19,7 +19,7 @@ var config = require('./config.json');
 if (config && config.apikey) APIKEY = config.apikey;
 else APIKEY = '4c563adf68bc357a4570d3e7986f6481';
 
-log.setDebug(false);
+log.setDebug(true);
 var maxTags = 4;
 
 if (config) {
@@ -33,9 +33,9 @@ if (config) {
 log.debug('successfully loaded configuration');
 
 // irc client setup
-var client = require('coffea')(),
-    net    = require('net'),
-    db     = require('./db_' + DBCONFIG.driver)(DBCONFIG);
+var client = require('coffea')();
+client.loadPlugin('coffea-telegram');
+var db     = require('./db_' + DBCONFIG.driver)(DBCONFIG);
 
 var network_config = {};
 var id = 0;
@@ -341,78 +341,78 @@ client.on('privatemessage', function(err, event) {
     if (admin) {
       switch (args[0]) {
         case 'dump':
-          client.send(event.user, db.dump());
+          event.reply(db.dump());
           break;
         case 'flush':
           db.flush(function(err) {
-            if (err) client.send(event.user, 'Error: ' + JSON.stringify(err));
-            else client.send(event.user, 'done');
+            if (err) event.reply('Error: ' + JSON.stringify(err));
+            else event.reply('done');
           });
           break;
         case 'count':
-          client.send(event.user, JSON.stringify(db.count()));
+          event.reply(JSON.stringify(db.count()));
           break;
         case 'del':
           if (args.length >= 2) {
             db.del(args[1]);
             db.flush();
-            client.send(event.user, 'done');
-          } else client.send(event.user, 'needs more arguments');
+            event.reply('done');
+          } else event.reply('needs more arguments');
           break;
         case 'get':
           if (args.length >= 2) {
-            client.send(event.user, args[1] + ': ' + db.get(args[1]));
-          } else client.send(event.user, 'needs more arguments');
+            event.reply(args[1] + ': ' + db.get(args[1]));
+          } else event.reply('needs more arguments');
           break;
         case 'set':
           if (args.length >= 3) {
             db.set(args[1], args[2]);
             db.flush();
-            client.send(event.user, 'done');
-          } else client.send(event.user, 'needs more arguments');
+            event.reply('done');
+          } else event.reply('needs more arguments');
           break;
         case 'reload':
-          client.send(event.user, 'wip'); // TODO
+          event.reply('wip'); // TODO
           break;
         case 'wp':
           var dbdump = db.dumpRaw();
           for (var key in db.dumpRaw()) {
-            np(event.user, key, true);
+            np(event, key, true);
           }
           break;
         default:
-          client.send(event.user, 'I don\'t understand you');
+          event.reply('I don\'t understand you');
           break;
       }
     }
   });
 });
 
-function np(to, nick, wp) {
-  log.debug('np(', wp ? to.nick : to.name, ',', nick, ',', wp, ')');
+function np(event, nick, wp) {
+  log.debug('np(', wp ? event.channel.name : event.user.nick, ',', nick, ',', wp, ')');
   var resolved_nick = db.get(nick, nick);
   if (resolved_nick == nick) db.set(nick, nick); // store this nick for wp command
   getRecentTrack(resolved_nick, function(msg) {
-    client.send(to, wp ? '[' + client.format.bold + nick + client.format.bold + '] ' + msg : msg);
+    event.reply(wp ? '[' + client.format.bold + nick + client.format.bold + '] ' + msg : msg);
   });
 }
 
-function whois(to, nick, wp) {
+function whois(event, nick, wp) {
   log.debug('whois(', wp ? to.nick : to.name, ',', nick, ')');
   var resolved_nick = db.get(nick, nick);
   if (resolved_nick == nick) db.set(nick, nick); // store this nick for wp command
-  client.send(to, '\'' + client.format.bold + nick + client.format.bold + '\' is \'' + client.format.bold + resolved_nick + client.format.bold + '\' on last.fm: http://last.fm/user/' + resolved_nick);
+  event.reply('\'' + client.format.bold + nick + client.format.bold + '\' is \'' + client.format.bold + resolved_nick + client.format.bold + '\' on last.fm: http://last.fm/user/' + resolved_nick);
 }
 
-function compare(to, nick1, nick2) {
+function compare(event, nick1, nick2) {
   log.debug('compare(', to, ',', nick1, ',', nick2, ')');
   compareUsers(db.get(nick1, nick1), db.get(nick2, nick2), function(msg) {
-    client.send(to, msg);
+    event.reply(msg);
   });
 }
 
 client.on('message', function(err, event) {
-    if (event.message.match(/\(np\)/g) || event.message.match(/lastfm:np/g)) np(event.channel, event.user.nick);
+    if (event.message.match(/\(np\)/g) || event.message.match(/lastfm:np/g)) np(event, event.user.nick);
     if (network_config[event.network] && network_config[event.network].prefix && (event.message.substr(0, 1) == network_config[event.network].prefix)) {
     var args = event.message.trim().substr(1).split(' ');
 
@@ -420,34 +420,34 @@ client.on('message', function(err, event) {
     switch (args[0]) {
       case 'source':
       case 'version':
-        client.send(event.channel, 'node-np v' + VERSION + ' (standalone last.fm bot written in node.js) - Source: https://github.com/omnidan/node-np');
+        event.reply('node-np v' + VERSION + ' (standalone last.fm bot written in node.js) - Source: https://github.com/omnidan/node-np');
         break;
       case 'issue':
       case 'issues':
       case 'bug':
-        client.send(event.channel, 'Please file issue requests here: https://github.com/omnidan/node-np/issues');
+        event.reply('Please file issue requests here: https://github.com/omnidan/node-np/issues');
         break;
       case 'strip':
-        client.send(event.channel, '*takes off its clothes* I\'m running on node v' + process.versions.node + ' with v8 v' + process.versions.v8);
+        event.reply('*takes off its clothes* I\'m running on node v' + process.versions.node + ' with v8 v' + process.versions.v8);
         break;
       case 'setuser':
         if (args.length > 1) {
           db.set(event.user.nick, args[1]);
           db.flush();
-          client.send(event.channel, '\'' + client.format.bold + event.user.nick + client.format.bold + '\' is now associated with http://last.fm/user/' + args[1]); // TODO: check if last.fm user exists?
+          event.reply('\'' + client.format.bold + event.user.nick + client.format.bold + '\' is now associated with http://last.fm/user/' + args[1]); // TODO: check if last.fm user exists?
         } else {
-          client.send(event.channel, network_config[event.network].prefix + 'setuser needs a last.fm username');
+          event.reply(network_config[event.network].prefix + 'setuser needs a last.fm username');
         }
         break;
       case 'help':
-        client.send(event.channel, 'I am a last.fm bot. Use "' + client.format.bold + network_config[event.network].prefix + 'setuser LAST_FM_NICK' + client.format.bold +
+        event.reply('I am a last.fm bot. Use "' + client.format.bold + network_config[event.network].prefix + 'setuser LAST_FM_NICK' + client.format.bold +
           '" to associate your irc nick with your last.fm account. Then run "' + client.format.bold + network_config[event.network].prefix + 'np' + client.format.bold + '"');
         break;
       case 'np':
         if (args.length > 1) {
-          np(event.channel, args[1]);
+          np(event, args[1]);
         } else {
-          np(event.channel, event.user.nick);
+          np(event, event.user.nick);
         }
         break;
       case 'wp':
@@ -455,22 +455,22 @@ client.on('message', function(err, event) {
           if (admin) {
             var dbdump = db.dumpRaw();
             for (var key in db.dumpRaw()) {
-              np(event.user, key, true);
+              np(event, key, true);
             }
           }
         });
         break;
       case 'whois':
         if (args.length > 1) {
-          whois(event.channel, args[1]);
+          whois(event, args[1]);
         } else {
-          whois(event.channel, event.user.nick);
+          whois(event, event.user.nick);
         }
         break;
       case 'wwhois':
         isAdmin(event, function (admin) {
           if (admin) {
-            client.send(event.channel, event.user.nick + ' ;)');
+            event.reply(event.user.nick + ' ;)');
             var dbdump = db.dumpRaw();
             for (var key in db.dumpRaw()) {
               whois(event.user, key, true);
@@ -480,11 +480,11 @@ client.on('message', function(err, event) {
         break;
       case 'compare':
         if (args.length > 2) {
-          compare(event.channel, args[1], args[2]);
+          compare(event, args[1], args[2]);
         } else if (args.length > 1) {
-          compare(event.channel, event.user.nick, args[1]);
+          compare(event, event.user.nick, args[1]);
         } else {
-          client.send(event.channel, 'Use "' + client.format.bold + network_config[event.network].prefix + 'compare NICK' + client.format.bold +
+          event.reply('Use "' + client.format.bold + network_config[event.network].prefix + 'compare NICK' + client.format.bold +
             '" or "' + client.format.bold + network_config[event.network].prefix + 'compare NICK1 NICK2' + client.format.bold + '"');
         }
         break;
@@ -492,14 +492,14 @@ client.on('message', function(err, event) {
         // TODO: move to function, allow in PM too
         isAdmin(event, function (admin) {
           if (args.length > 2) {
-            client.send(event.channel, 'Not implemented yet.'); // TODO: get network from coffea and set to network
+            event.reply('Not implemented yet.'); // TODO: get network from coffea and set to network
           } else if (args.length > 1) {
-            client.join(args[1]);
+            client.join(args[1], event.network);
             if (!args[3]) {
               // TODO: store channel in config
             }
           } else {
-            client.send(event.channel, 'Use "' + client.format.bold + network_config[event.network].prefix + 'join #CHANNEL' + client.format.bold +
+            event.reply('Use "' + client.format.bold + network_config[event.network].prefix + 'join #CHANNEL' + client.format.bold +
               '" or "' + client.format.bold + network_config[event.network].prefix + 'join #CHANNEL NETWORK' + client.format.bold + '"');
           }
         });
@@ -508,14 +508,14 @@ client.on('message', function(err, event) {
         // TODO: move to function, allow in PM too
         isAdmin(event, function (admin) {
           if (args.length > 2) {
-            client.send(event.channel, 'Not implemented yet.'); // TODO: get network from coffea and set to network
+            event.reply('Not implemented yet.'); // TODO: get network from coffea and set to network
           } else if (args.length > 1) {
-            client.part(args[1]);
+            client.part(args[1], event.network);
             if (!args[3]) {
               // TODO: store channel in config
             }
           } else {
-            client.send(event.channel, 'Use "' + client.format.bold + network_config[event.network].prefix + 'part #CHANNEL' + client.format.bold +
+            event.reply('Use "' + client.format.bold + network_config[event.network].prefix + 'part #CHANNEL' + client.format.bold +
               '" or "' + client.format.bold + network_config[event.network].prefix + 'part #CHANNEL NETWORK' + client.format.bold + '"');
           }
         });
