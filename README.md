@@ -6,6 +6,19 @@ _standalone last.fm bot written in node.js_
 __NOTE: This branch uses ES6 proxies, make sure to run your programs with the `--harmony_proxies` flag and ideally on the latest io.js version (that's what I'm testing with): `node --harmony_proxies script.js`__
 
 
+Telegram support
+----------------
+
+In the `networks` part of the config file, just add (make sure to replace `TELEGRAM_TOKEN` with the actual token you got from [@botfather](http://telegram.me/botfather)):
+```
+    {
+      "protocol": "telegram",
+      "token": "TELEGRAM_TOKEN",
+      "prefix": "/"
+    }
+```
+
+
 Requirements
 ------------
 
