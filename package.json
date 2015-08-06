@@ -1,6 +1,6 @@
 {
   "name": "node-np",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "author": "Daniel Bugl <daniel.bugl@touchlay.com>",
   "description": "standalone last.fm bot written in node.js",
   "contributors": [
