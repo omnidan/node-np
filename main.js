@@ -77,7 +77,7 @@ var lastfm = new LastFmNode({
 });
 log.debug('using last.fm API with key:', APIKEY);
 
-client.on('motd', function (err, event) {
+client.on('motd', function (event, err) {
   if (network_config[event.network] && network_config[event.network].nickserv) {
     log.debug('identifying with NickServ on network ' + event.network + ':', JSON.stringify(network_config[event.network].nickserv));
     client.send('NickServ', 'IDENTIFY ' + network_config[event.network].nickserv, event.network);
@@ -255,11 +255,11 @@ function getRecentTrack(nick, callback) {
     handlers: {
       success: function (data) {
         if (data.recenttracks.hasOwnProperty('track')) {
-          var track = (data.recenttracks.track instanceof Array) ? data.recenttracks.track[0] : data.recenttracks.track;
+          var track = Array.isArray(data.recenttracks.track) ? data.recenttracks.track[0] : data.recenttracks.track;
           var now_playing = track.hasOwnProperty('@attr') && track['@attr'].nowplaying === 'true';
           var date = (track.date && track.date['#text']) ? track.date['#text'] : undefined;
+
           lastfm.request('track.getInfo', {
-            mbid: track.mbid,
             track: track.name,
             artist: track.artist['#text'],
             username: nick,
@@ -294,7 +294,7 @@ function getRecentTrack(nick, callback) {
                 }
               },
               error: function (err) {
-                log.error('getRecentTrack error:', err);
+                log.error('getRecentTrack error:', err.stack);
                 callback(err.message);
               }
             }
@@ -333,7 +333,7 @@ function isAdmin(event, callback) {
   }
 }
 
-client.on('privatemessage', function(err, event) {
+client.on('privatemessage', function(event, err) {
   var args = event.message.split(' ');
 
   // admin commands
@@ -411,7 +411,7 @@ function compare(to, nick1, nick2) {
   });
 }
 
-client.on('message', function(err, event) {
+client.on('message', function(event, err) {
     if (event.message.match(/\(np\)/g) || event.message.match(/lastfm:np/g)) np(event.channel, event.user.nick);
     if (network_config[event.network] && network_config[event.network].prefix && (event.message.substr(0, 1) == network_config[event.network].prefix)) {
     var args = event.message.trim().substr(1).split(' ');
