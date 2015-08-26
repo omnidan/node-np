@@ -2,7 +2,7 @@
 
 var log = require('log-simple')();
 
-var VERSION = '0.5.11';
+var VERSION = '0.5.12';
 /* TODO
  * Connect to new networks, join channels, etc.. without restarting (+0.1.0)
  * Better NPM integration, publish on NPM (+0.0.1)
@@ -19,7 +19,7 @@ var config = require('./config.json');
 if (config && config.apikey) APIKEY = config.apikey;
 else APIKEY = '4c563adf68bc357a4570d3e7986f6481';
 
-log.setDebug(false);
+log.setDebug(config.debug);
 var maxTags = 4;
 
 if (config) {
@@ -34,7 +34,6 @@ log.debug('successfully loaded configuration');
 
 // irc client setup
 var client = require('coffea')(),
-    net    = require('net'),
     db     = require('./db_' + DBCONFIG.driver)(DBCONFIG);
 
 var network_config = {};
@@ -91,7 +90,7 @@ client.on('motd', function (err, event) {
   rl.prompt();
 });
 
-function compareUsers(nick1, nick2, callback) {
+function compareUsers(event, nick1, nick2, callback) {
   lastfm.request('tasteometer.compare', {
     type1: 'user',
     value1: nick1,
@@ -100,25 +99,25 @@ function compareUsers(nick1, nick2, callback) {
     handlers: {
       success: function (data) {
         var score = Number((parseFloat(data.comparison.result.score) * 100).toFixed(2));
-        var artists = data.comparison.result.artists.artist;
+        var artists = data && data.comparison && data.comparison.result && data.comparison.result.artists && data.comparison.result.artists.artist;
 
-        var str = 'Comparing \'' + client.format.bold + nick1 + client.format.bold + '\' with \'' + client.format.bold + nick2 + client.format.bold + '\': ';
-        str += client.format.bold;
-        if (score < 10) str += client.format.normal;
-        else if (score < 25) str += client.format.brown;
-        else if (score < 50) str += client.format.red;
-        else if (score < 75) str += client.format.yellow;
-        else if (score < 95) str += client.format.green;
-        else str += client.format.aqua;
+        var str = 'Comparing \'' + client.format.get('bold', event.network) + nick1 + client.format.get('bold', event.network) + '\' with \'' + client.format.get('bold', event.network) + nick2 + client.format.get('bold', event.network) + '\': ';
+        str += client.format.get('bold', event.network);
+        if (score < 10) str += client.format.get('normal', event.network);
+        else if (score < 25) str += client.format.get('brown', event.network);
+        else if (score < 50) str += client.format.get('red', event.network);
+        else if (score < 75) str += client.format.get('yellow', event.network);
+        else if (score < 95) str += client.format.get('green', event.network);
+        else str += client.format.get('aqua', event.network);
         str += score + '%';
-        str += client.format.reset;
+        str += client.format.get('reset', event.network);
 
         if (artists) {
           for (var i=0; i < artists.length; i++) {
             if (artists[i].name) {
               if (i === 0) str += ' - Common artists include: ';
 
-              str += client.format.teal + client.format.bold + artists[i].name + client.format.reset;
+              str += client.format.get('teal', event.network) + client.format.get('bold', event.network) + artists[i].name + client.format.get('reset', event.network);
 
               if (i != artists.length-1) str += ', ';
             }
@@ -128,32 +127,35 @@ function compareUsers(nick1, nick2, callback) {
         callback(str);
       },
       error: function (err) {
-        callback(err.message);
+        log.debug('compareUsers error:', err.stack);
+        callback('last.fm api error - compareUsers/tasteometer.compare: ' + err.message);
       }
     }
   });
 }
 
-function parseTrackInfo(track, nick, callback) {
+function parseTrackInfo(event, track, nick, callback) {
   var str;
 
+  if (!track) return callback('last.fm api error - parseTrackInfo: track undefined');
+
   if (track.now_playing) {
-    str = '\'' + client.format.bold + nick + client.format.bold + '\' is now playing: ';
+    str = '\'' + client.format.get('bold', event.network) + nick + client.format.get('bold', event.network) + '\' is now playing: ';
   } else {
-    str = '\'' + client.format.bold + nick + client.format.bold + '\' is not listening to anything right now. The last played track (on ' + track.date + ' UTC) was: ';
+    str = '\'' + client.format.get('bold', event.network) + nick + client.format.get('bold', event.network) + '\' is not listening to anything right now. The last played track (on ' + track.date + ' UTC) was: ';
   }
 
-  if (track.artist && track.artist.name) str += client.format.olive + client.format.bold + track.artist.name + client.format.reset + ' - ';
+  if (track.artist && track.artist.name) str += client.format.get('olive', event.network) + client.format.get('bold', event.network) + track.artist.name + client.format.get('reset', event.network) + ' - ';
 
-  if (track.album && track.album.title) str += client.format.olive + client.format.bold + track.album.title + client.format.reset + ' - ';
+  if (track.album && track.album.title) str += client.format.get('olive', event.network) + client.format.get('bold', event.network) + track.album.title + client.format.get('reset', event.network) + ' - ';
 
-  str += client.format.olive + client.format.bold + track.name + client.format.reset;
+  str += client.format.get('olive', event.network) + client.format.get('bold', event.network) + track.name + client.format.get('reset', event.network);
 
-  if (track.userloved && (track.userloved !== '0')) str += ' [' + client.format.red + '<3' + client.format.normal + ' - ';
+  if (track.userloved && (track.userloved !== '0')) str += ' [' + client.format.get('red', event.network) + '<3' + client.format.get('normal', event.network) + ' - ';
   else if (track.userplaycount) str += ' [';
 
-  if (track.userplaycount) str += 'playcount ' + client.format.bold + track.userplaycount + 'x' + client.format.bold + ']';
-  else if (track.userloved && (track.userloved !== '0')) str += 'playcount ' + client.format.bold + '0x' + client.format.bold + ']'; // this shouldn't happen unless the user loves a track with no plays (and who would do that?)
+  if (track.userplaycount) str += 'playcount ' + client.format.get('bold', event.network) + track.userplaycount + 'x' + client.format.get('bold', event.network) + ']';
+  else if (track.userloved && (track.userloved !== '0')) str += 'playcount ' + client.format.get('bold', event.network) + '0x' + client.format.get('bold', event.network) + ']'; // this shouldn't happen unless the user loves a track with no plays (and who would do that?)
 
   if (track.toptags) {
     var tags = (track.toptags instanceof Array) ? track.toptags : [track.toptags];
@@ -162,7 +164,7 @@ function parseTrackInfo(track, nick, callback) {
       if (tags[i] && tags[i].name) {
         if (i === 0) str += ' (';
 
-        str += client.format.teal + client.format.bold + tags[i].name + client.format.reset;
+        str += client.format.get('teal', event.network) + client.format.get('bold', event.network) + tags[i].name + client.format.get('reset', event.network);
 
         if (i != max-1) str += ', ';
         else str += ')';
@@ -174,27 +176,27 @@ function parseTrackInfo(track, nick, callback) {
     var secs = (track.duration / 1000); // ms to sec
     var mins = Math.floor(secs / 60); // sec to min
     secs = Math.round(((secs / 60) - mins) * 60); // remaining seconds
-    str += ' [' + client.format.olive + client.format.bold;
+    str += ' [' + client.format.get('olive', event.network) + client.format.get('bold', event.network);
     if (mins < 10) str += '0';
     str += mins + ':';
     if (secs < 10) str += '0';
     str += secs;
-    str += client.format.reset + ']';
+    str += client.format.get('reset', event.network) + ']';
   }
 
   callback(str);
 }
 
-function getArtistTags(track, nick, callback) {
+function getArtistTags(event, track, nick, callback) {
   log.debug('getting artist tags');
   lastfm.request('artist.getTopTags', {
-    mbid: track.artist.mbid,
-    artist: track.artist.name,
+    mbid: track && track.artist && track.artist.mbid,
+    artist: track && track.artist && track.artist.name,
     autocorrect: 1,
     handlers: {
       success: function (data) {
         var tags;
-        if (data.toptags && data.toptags.tag) {
+        if (data && data.toptags && data.toptags.tag) {
           tags = (data.toptags.tag instanceof Array) ? data.toptags.tag : [data.toptags];
         } else {
           tags = [];
@@ -202,29 +204,29 @@ function getArtistTags(track, nick, callback) {
 
         if (tags.length > 0) {
           track.toptags = tags;
-          parseTrackInfo(track, nick, callback);
+          parseTrackInfo(event, track, nick, callback);
         } else {
-          parseTrackInfo(track, nick, callback); // no tags
+          parseTrackInfo(event, track, nick, callback); // no tags
         }
       },
       error: function (err) {
-        log.debug('getArtistTags error:', err);
+        log.debug('getArtistTags error:', err.stack);
         log.debug('you can probably ignore this error above, this track has no tags.');
-        parseTrackInfo(track, nick, callback); // no tags
+        parseTrackInfo(event, track, nick, callback); // no tags
       }
     }
   });
 }
 
-function getAlbumTags(track, nick, callback) {
+function getAlbumTags(event, track, nick, callback) {
   log.debug('getting album tags', track, track.album);
   lastfm.request('album.getTopTags', {
-    mbid: track.album.mbid,
+    mbid: track && track.album && track.album.mbid,
     autocorrect: 1,
     handlers: {
       success: function (data) {
         var tags;
-        if (data.toptags && data.toptags.tag) {
+        if (data && data.toptags && data.toptags.tag) {
           tags = (data.toptags.tag instanceof Array) ? data.toptags.tag : [data.toptags];
         } else {
           tags = [];
@@ -232,44 +234,48 @@ function getAlbumTags(track, nick, callback) {
 
         if (tags.length > 0) {
           track.toptags = tags;
-          parseTrackInfo(track, nick, callback);
+          parseTrackInfo(event, track, nick, callback);
         } else {
           // get tags from artist
-          getArtistTags(track, nick, callback);
+          getArtistTags(event, track, nick, callback);
         }
       },
       error: function (err) {
         // get tags from artist
         log.debug('getAlbumTags error:', err);
         log.debug('you can probably ignore this error above, trying to get tags from artist...');
-        getArtistTags(track, nick, callback);
+        getArtistTags(event, track, nick, callback); // no tags
       }
     }
   });
 }
 
-function getRecentTrack(nick, callback) {
+function getRecentTrack(event, nick, callback) {
   lastfm.request('user.getRecentTracks', {
     user: nick,
     limit: 1,
     handlers: {
       success: function (data) {
-        if (data.recenttracks.hasOwnProperty('track')) {
+        if (data && data.recenttracks && data.recenttracks.hasOwnProperty('track')) {
           var track = (data.recenttracks.track instanceof Array) ? data.recenttracks.track[0] : data.recenttracks.track;
-          var now_playing = track.hasOwnProperty('@attr') && track['@attr'].nowplaying === 'true';
-          var date = (track.date && track.date['#text']) ? track.date['#text'] : undefined;
+          var now_playing = track && track.hasOwnProperty('@attr') && track['@attr'].nowplaying === 'true';
+          var date = (track && track.date && track.date['#text']) ? track.date['#text'] : undefined;
           lastfm.request('track.getInfo', {
-            mbid: track.mbid,
-            track: track.name,
-            artist: track.artist['#text'],
+            mbid: track && track.mbid,
+            track: track && track.name,
+            artist: track && track.artist && track.artist['#text'],
             username: nick,
             handlers: {
               success: function (data) {
+                if (!data || !data.track) {
+                  return callback('last.fm api error - getRecentTrack/user.getRecentTracks: data.track undefined');
+                }
+                
                 data.track.date = date;
                 data.track.now_playing = now_playing;
 
                 var tags;
-                if (data.track.toptags && data.track.toptags.tag && (data.track.toptags.tag instanceof Array)) {
+                if (data && data.track && data.track.toptags && data.track.toptags.tag && (data.track.toptags.tag instanceof Array)) {
                   tags = data.track.toptags.tag;
                 } else {
                   if ((typeof data.track.toptags === 'string') && (data.track.toptags.length > 0)) {
@@ -282,25 +288,25 @@ function getRecentTrack(nick, callback) {
 
                 if (tags.length > 0) {
                   data.track.toptags = tags;
-                  parseTrackInfo(data.track, nick, callback);
+                  parseTrackInfo(event, data.track, nick, callback);
                 } else {
                   if (data.album) {
                     // get tags from album
-                    getAlbumTags(data.track, nick, callback);
+                    getAlbumTags(event, data.track, nick, callback);
                   } else {
                     // get tags from artist
-                    getArtistTags(data.track, nick, callback);
+                    getArtistTags(event, data.track, nick, callback);
                   }
                 }
               },
               error: function (err) {
-                log.error('getRecentTrack error:', err);
-                callback(err.message);
+                log.error('getRecentTrack error:', err.stack);
+                callback('last.fm api error - getRecentTrack/user.getRecentTracks: ' + err.message);
               }
             }
           });
         } else {
-          callback('\'' + client.format.bold + nick + client.format.bold + '\' hasn\'t scrobbled any tracks yet.');
+          callback('\'' + client.format.get('bold', event.network) + nick + client.format.get('bold', event.network) + '\' hasn\'t scrobbled any tracks yet.');
         }
       },
 
@@ -333,81 +339,84 @@ function isAdmin(event, callback) {
   }
 }
 
-client.on('privatemessage', function (event) {
+client.on('privatemessage', function(err, event) {
+  var args = event.message.split(' ');
+
   // admin commands
   isAdmin(event, function (admin) {
     if (admin) {
-      switch (event.cmd) {
+      switch (args[0]) {
         case 'dump':
-          client.send(event.user, db.dump());
+          event.reply(db.dump());
           break;
         case 'flush':
-          db.flush(function (err) {
-            if (err) client.send(event.user, 'Error: ' + JSON.stringify(err));
-            else client.send(event.user, 'done');
+          db.flush(function(err) {
+            if (err) event.reply('Error: ' + JSON.stringify(err));
+            else event.reply('done');
           });
           break;
         case 'count':
-          client.send(event.user, JSON.stringify(db.count()));
+          event.reply(JSON.stringify(db.count()));
           break;
         case 'del':
-          if (event.args.length > 0) {
-            db.del(event.args[0]);
+          if (args.length >= 2) {
+            db.del(args[1]);
             db.flush();
-            client.send(event.user, 'done');
-          } else client.send(event.user, 'needs more arguments');
+            event.reply('done');
+          } else event.reply('needs more arguments');
           break;
         case 'get':
-          if (event.args.length > 0) {
-            client.send(event.user, event.args[0] + ': ' + db.get(event.args[0]));
-          } else client.send(event.user, 'needs more arguments');
+          if (args.length >= 2) {
+            event.reply(args[1] + ': ' + db.get(args[1]));
+          } else event.reply('needs more arguments');
           break;
         case 'set':
-          if (event.args.length > 1) {
-            db.set(event.args[0], event.args[1]);
+          if (args.length >= 3) {
+            db.set(args[1], args[2]);
             db.flush();
-            client.send(event.user, 'done');
-          } else client.send(event.user, 'needs more arguments');
+            event.reply('done');
+          } else event.reply('needs more arguments');
           break;
         case 'reload':
-          client.send(event.user, 'wip'); // TODO
+          event.reply('wip'); // TODO
           break;
         case 'wp':
           var dbdump = db.dumpRaw();
           for (var key in db.dumpRaw()) {
-            np(event.user, key, true);
+            np(event, key, true);
           }
           break;
         default:
-          client.send(event.user, 'I don\'t understand you');
+          event.reply('I don\'t understand you');
           break;
       }
     }
   });
 });
 
-function np(to, nick, wp) {
-  log.debug('np(', wp ? to.nick : to.name, ',', nick, ',', wp, ')');
+function np(event, nick, wp) {
+  log.debug('np(', nick, ',', wp, ')');
   var resolved_nick = db.get(nick, nick);
   if (resolved_nick == nick) db.set(nick, nick); // store this nick for wp command
-  getRecentTrack(resolved_nick, function (msg) {
-    client.send(to, wp ? '[' + client.format.bold + nick + client.format.bold + '] ' + msg : msg);
+  getRecentTrack(event, resolved_nick, function(msg) {
+    event.reply(wp ? '[' + client.format.get('bold', event.network) + nick + client.format.get('bold', event.network) + '] ' + msg : msg);
   });
 }
 
-function whois(to, nick, wp) {
-  log.debug('whois(', wp ? to.nick : to.name, ',', nick, ')');
+function whois(event, nick, wp) {
+  log.debug('whois(', nick, ')');
   var resolved_nick = db.get(nick, nick);
   if (resolved_nick == nick) db.set(nick, nick); // store this nick for wp command
-  client.send(to, '\'' + client.format.bold + nick + client.format.bold + '\' is \'' + client.format.bold + resolved_nick + client.format.bold + '\' on last.fm: http://last.fm/user/' + resolved_nick);
+  event.reply('\'' + client.format.get('bold', event.network) + nick + client.format.get('bold', event.network) + '\' is \'' + client.format.get('bold', event.network) + resolved_nick + client.format.get('bold', event.network) + '\' on last.fm: http://last.fm/user/' + resolved_nick);
 }
 
-function compare(to, nick1, nick2) {
-  log.debug('compare(', to, ',', nick1, ',', nick2, ')');
-  compareUsers(db.get(nick1, nick1), db.get(nick2, nick2), function (msg) {
-    client.send(to, msg);
+function compare(event, nick1, nick2) {
+  log.debug('compare(', nick1, ',', nick2, ')');
+  compareUsers(event, db.get(nick1, nick1), db.get(nick2, nick2), function(msg) {
+    event.reply(msg);
   });
 }
+
 
 client.on('message', function (event) {
     if (event.message.match(/\(np\)/g) || event.message.match(/lastfm:np/g)) np(event.channel, event.user.nick);
@@ -417,34 +426,34 @@ client.on('command', function (event) {
   switch (event.cmd) {
     case 'source':
     case 'version':
-      client.send(event.channel, 'node-np v' + VERSION + ' (standalone last.fm bot written in node.js) - Source: https://github.com/omnidan/node-np');
+      event.reply('node-np v' + VERSION + ' (standalone last.fm bot written in node.js) - Source: https://github.com/omnidan/node-np');
       break;
     case 'issue':
     case 'issues':
     case 'bug':
-      client.send(event.channel, 'Please file issue requests here: https://github.com/omnidan/node-np/issues');
+      event.reply('Please file issue requests here: https://github.com/omnidan/node-np/issues');
       break;
     case 'strip':
-      client.send(event.channel, '*takes off its clothes* I\'m running on node v' + process.versions.node + ' with v8 v' + process.versions.v8);
+      event.reply('*takes off its clothes* I\'m running on node v' + process.versions.node + ' with v8 v' + process.versions.v8);
       break;
     case 'setuser':
       if (event.args.length > 0) {
         db.set(event.user.nick, event.args[0]);
         db.flush();
-        client.send(event.channel, '\'' + client.format.bold + event.user.nick + client.format.bold + '\' is now associated with http://last.fm/user/' + event.args[0]); // TODO: check if last.fm user exists?
+        event.reply('\'' + client.format.get('bold', event.network) + event.user.nick + client.format.get('bold', event.network) + '\' is now associated with http://last.fm/user/' + event.args[0]); // TODO: check if last.fm user exists?
       } else {
-        client.send(event.channel, network_config[event.network].prefix + 'setuser needs a last.fm username');
+        event.reply(network_config[event.network].prefix + 'setuser needs a last.fm username');
       }
       break;
     case 'help':
-      client.send(event.channel, 'I am a last.fm bot. Use "' + client.format.bold + network_config[event.network].prefix + 'setuser LAST_FM_NICK' + client.format.bold +
-        '" to associate your irc nick with your last.fm account. Then run "' + client.format.bold + network_config[event.network].prefix + 'np' + client.format.bold + '"');
+      event.reply('I am a last.fm bot. Use "' + client.format.get('bold', event.network) + network_config[event.network].prefix + 'setuser LAST_FM_NICK' + client.format.get('bold', event.network) +
+        '" to associate your irc nick with your last.fm account. Then run "' + client.format.get('bold', event.network) + network_config[event.network].prefix + 'np' + client.format.get('bold', event.network) + '"');
       break;
     case 'np':
       if (event.args.length > 0) {
-        np(event.channel, event.args[0]);
+        np(event, event.args[0]);
       } else {
-        np(event.channel, event.user.nick);
+        np(event, event.user.nick);
       }
       break;
     case 'wp':
@@ -452,52 +461,52 @@ client.on('command', function (event) {
         if (admin) {
           var dbdump = db.dumpRaw();
           for (var key in db.dumpRaw()) {
-            np(event.user, key, true);
+            np(event, event.user, key, true);
           }
         }
       });
       break;
     case 'whois':
       if (event.args.length > 0) {
-        whois(event.channel, event.args[0]);
+        whois(event, event.args[0]);
       } else {
-        whois(event.channel, event.user.nick);
+        whois(event, event.user.nick);
       }
       break;
     case 'wwhois':
       isAdmin(event, function (admin) {
         if (admin) {
-          client.send(event.channel, event.user.nick + ' ;)');
+          event.reply(event.user.nick + ' ;)');
           var dbdump = db.dumpRaw();
           for (var key in db.dumpRaw()) {
-            whois(event.user, key, true);
+            whois(event, event.user, key, true);
           }
         }
       });
       break;
     case 'compare':
       if (event.args.length > 1) {
-        compare(event.channel, event.args[0], event.args[1]);
+        compare(event, event.args[0], event.args[1]);
       } else if (event.args.length > 0) {
-        compare(event.channel, event.user.nick, event.args[0]);
+        compare(event, event.user.nick, event.args[0]);
       } else {
-        client.send(event.channel, 'Use "' + client.format.bold + network_config[event.network].prefix + 'compare NICK' + client.format.bold +
-          '" or "' + client.format.bold + network_config[event.network].prefix + 'compare NICK1 NICK2' + client.format.bold + '"');
+        event.reply('Use "' + client.format.get('bold', event.network) + network_config[event.network].prefix + 'compare NICK' + client.format.get('bold', event.network) +
+          '" or "' + client.format.get('bold', event.network) + network_config[event.network].prefix + 'compare NICK1 NICK2' + client.format.get('bold', event.network) + '"');
       }
       break;
     case 'join': // join #channel (network) (nostore), join #channel (nostore)
       // TODO: move to function, allow in PM too
       isAdmin(event, function (admin) {
         if (event.args.length > 1) {
-          client.send(event.channel, 'Not implemented yet.'); // TODO: get network from coffea and set to network
+          event.reply('Not implemented yet.'); // TODO: get network from coffea and set to network
         } else if (event.args.length > 0) {
           client.join(event.args[0]);
           // if (!event.args[2]) {
             // TODO: store channel in config
           // }
         } else {
-          client.send(event.channel, 'Use "' + client.format.bold + network_config[event.network].prefix + 'join #CHANNEL' + client.format.bold +
-            '" or "' + client.format.bold + network_config[event.network].prefix + 'join #CHANNEL NETWORK' + client.format.bold + '"');
+          event.reply('Use "' + client.format.get('bold', event.network) + network_config[event.network].prefix + 'join #CHANNEL' + client.format.get('bold', event.network) +
+            '" or "' + client.format.get('bold', event.network) + network_config[event.network].prefix + 'join #CHANNEL NETWORK' + client.format.get('bold', event.network) + '"');
         }
       });
       break;
@@ -505,15 +514,15 @@ client.on('command', function (event) {
       // TODO: move to function, allow in PM too
       isAdmin(event, function (admin) {
         if (event.args.length > 1) {
-          client.send(event.channel, 'Not implemented yet.'); // TODO: get network from coffea and set to network
+          event.reply('Not implemented yet.'); // TODO: get network from coffea and set to network
         } else if (event.args.length > 0) {
           client.part(event.args[0]);
           // if (!event.args[2]) {
             // TODO: store channel in config
           // }
         } else {
-          client.send(event.channel, 'Use "' + client.format.bold + network_config[event.network].prefix + 'part #CHANNEL' + client.format.bold +
-            '" or "' + client.format.bold + network_config[event.network].prefix + 'part #CHANNEL NETWORK' + client.format.bold + '"');
+          event.reply('Use "' + client.format.get('bold', event.network) + network_config[event.network].prefix + 'part #CHANNEL' + client.format.get('bold', event.network) +
+            '" or "' + client.format.get('bold', event.network) + network_config[event.network].prefix + 'part #CHANNEL NETWORK' + client.format.get('bold', event.network) + '"');
         }
       });
       break;
