@@ -2,7 +2,8 @@
 
 var log = require('log-simple')();
 
-var VERSION = '0.5.2-telegram';
+var VERSION = '0.5.12';
+VERSION += '-telegram'; // add telegram tag
 /* TODO
  * Connect to new networks, join channels, etc.. without restarting (+0.1.0)
  * Better NPM integration, publish on NPM (+0.0.1)
@@ -19,7 +20,7 @@ var config = require('./config.json');
 if (config && config.apikey) APIKEY = config.apikey;
 else APIKEY = '4c563adf68bc357a4570d3e7986f6481';
 
-log.setDebug(true);
+log.setDebug(config.debug);
 var maxTags = 4;
 
 if (config) {
@@ -33,9 +34,8 @@ if (config) {
 log.debug('successfully loaded configuration');
 
 // irc client setup
-var client = require('coffea')();
-client.loadPlugin('coffea-telegram');
-var db     = require('./db_' + DBCONFIG.driver)(DBCONFIG);
+var client = require('coffea')(),
+    db     = require('./db_' + DBCONFIG.driver)(DBCONFIG);
 
 var network_config = {};
 var id = 0;
@@ -57,14 +57,14 @@ var rl = readline.createInterface({
 });
 
 rl.setPrompt("> ", 2);
-rl.on("line", function(line) {
+rl.on("line", function (line) {
     if (line.trim() !== "") console.log(eval('client.' + line));
     rl.prompt();
 });
-rl.on('close', function() {
+rl.on('close', function () {
     return process.exit(1);
 });
-rl.on("SIGINT", function() {
+rl.on("SIGINT", function () {
     return process.exit(1);
 });
 
@@ -100,7 +100,7 @@ function compareUsers(event, nick1, nick2, callback) {
     handlers: {
       success: function (data) {
         var score = Number((parseFloat(data.comparison.result.score) * 100).toFixed(2));
-        var artists = data.comparison.result.artists.artist;
+        var artists = data && data.comparison && data.comparison.result && data.comparison.result.artists && data.comparison.result.artists.artist;
 
         var str = 'Comparing \'' + client.format.get('bold', event.network) + nick1 + client.format.get('bold', event.network) + '\' with \'' + client.format.get('bold', event.network) + nick2 + client.format.get('bold', event.network) + '\': ';
         str += client.format.get('bold', event.network);
@@ -128,7 +128,8 @@ function compareUsers(event, nick1, nick2, callback) {
         callback(str);
       },
       error: function (err) {
-        callback(err.message);
+        log.debug('compareUsers error:', err.stack);
+        callback('last.fm api error - compareUsers/tasteometer.compare: ' + err.message);
       }
     }
   });
@@ -136,6 +137,8 @@ function compareUsers(event, nick1, nick2, callback) {
 
 function parseTrackInfo(event, track, nick, callback) {
   var str;
+
+  if (!track) return callback('last.fm api error - parseTrackInfo: track undefined');
 
   if (track.now_playing) {
     str = '\'' + client.format.get('bold', event.network) + nick + client.format.get('bold', event.network) + '\' is now playing: ';
@@ -188,13 +191,13 @@ function parseTrackInfo(event, track, nick, callback) {
 function getArtistTags(event, track, nick, callback) {
   log.debug('getting artist tags');
   lastfm.request('artist.getTopTags', {
-    mbid: track.artist.mbid,
-    artist: track.artist.name,
+    mbid: track && track.artist && track.artist.mbid,
+    artist: track && track.artist && track.artist.name,
     autocorrect: 1,
     handlers: {
       success: function (data) {
         var tags;
-        if (data.toptags && data.toptags.tag) {
+        if (data && data.toptags && data.toptags.tag) {
           tags = (data.toptags.tag instanceof Array) ? data.toptags.tag : [data.toptags];
         } else {
           tags = [];
@@ -208,7 +211,7 @@ function getArtistTags(event, track, nick, callback) {
         }
       },
       error: function (err) {
-        log.debug('getArtistTags error:', err);
+        log.debug('getArtistTags error:', err.stack);
         log.debug('you can probably ignore this error above, this track has no tags.');
         parseTrackInfo(event, track, nick, callback); // no tags
       }
@@ -219,12 +222,12 @@ function getArtistTags(event, track, nick, callback) {
 function getAlbumTags(event, track, nick, callback) {
   log.debug('getting album tags', track, track.album);
   lastfm.request('album.getTopTags', {
-    mbid: track.album.mbid,
+    mbid: track && track.album && track.album.mbid,
     autocorrect: 1,
     handlers: {
       success: function (data) {
         var tags;
-        if (data.toptags && data.toptags.tag) {
+        if (data && data.toptags && data.toptags.tag) {
           tags = (data.toptags.tag instanceof Array) ? data.toptags.tag : [data.toptags];
         } else {
           tags = [];
@@ -242,7 +245,7 @@ function getAlbumTags(event, track, nick, callback) {
         // get tags from artist
         log.debug('getAlbumTags error:', err);
         log.debug('you can probably ignore this error above, trying to get tags from artist...');
-        getArtistTags(event, track, nick, callback);
+        getArtistTags(event, track, nick, callback); // no tags
       }
     }
   });
@@ -254,22 +257,26 @@ function getRecentTrack(event, nick, callback) {
     limit: 1,
     handlers: {
       success: function (data) {
-        if (data.recenttracks.hasOwnProperty('track')) {
+        if (data && data.recenttracks && data.recenttracks.hasOwnProperty('track')) {
           var track = (data.recenttracks.track instanceof Array) ? data.recenttracks.track[0] : data.recenttracks.track;
-          var now_playing = track.hasOwnProperty('@attr') && track['@attr'].nowplaying === 'true';
-          var date = (track.date && track.date['#text']) ? track.date['#text'] : undefined;
+          var now_playing = track && track.hasOwnProperty('@attr') && track['@attr'].nowplaying === 'true';
+          var date = (track && track.date && track.date['#text']) ? track.date['#text'] : undefined;
           lastfm.request('track.getInfo', {
-            mbid: track.mbid,
-            track: track.name,
-            artist: track.artist['#text'],
+            mbid: track && track.mbid,
+            track: track && track.name,
+            artist: track && track.artist && track.artist['#text'],
             username: nick,
             handlers: {
               success: function (data) {
+                if (!data || !data.track) {
+                  return callback('last.fm api error - getRecentTrack/user.getRecentTracks: data.track undefined');
+                }
+                
                 data.track.date = date;
                 data.track.now_playing = now_playing;
 
                 var tags;
-                if (data.track.toptags && data.track.toptags.tag && (data.track.toptags.tag instanceof Array)) {
+                if (data && data.track && data.track.toptags && data.track.toptags.tag && (data.track.toptags.tag instanceof Array)) {
                   tags = data.track.toptags.tag;
                 } else {
                   if ((typeof data.track.toptags === 'string') && (data.track.toptags.length > 0)) {
@@ -294,8 +301,8 @@ function getRecentTrack(event, nick, callback) {
                 }
               },
               error: function (err) {
-                log.error('getRecentTrack error:', err);
-                callback(err.message);
+                log.error('getRecentTrack error:', err.stack);
+                callback('last.fm api error - getRecentTrack/user.getRecentTracks: ' + err.message);
               }
             }
           });
@@ -316,7 +323,7 @@ function isAdmin(event, callback) {
   if (network_config[event.network] && network_config[event.network].admin) {
     var admin = network_config[event.network].admin;
     if (network_config[event.network].adminNickServ) {
-      client.whois(event.user.nick, function(err, res) {
+      client.whois(event.user.nick, function (err, res) {
         if (!res) callback(false);
         else {
           var user = res.account;
@@ -389,7 +396,7 @@ client.on('privatemessage', function(err, event) {
 });
 
 function np(event, nick, wp) {
-  log.debug('np(', wp ? event.channel.name : event.user.nick, ',', nick, ',', wp, ')');
+  log.debug('np(', nick, ',', wp, ')');
   var resolved_nick = db.get(nick, nick);
   if (resolved_nick == nick) db.set(nick, nick); // store this nick for wp command
   getRecentTrack(event, resolved_nick, function(msg) {
@@ -398,132 +405,130 @@ function np(event, nick, wp) {
 }
 
 function whois(event, nick, wp) {
-  log.debug('whois(', wp ? to.nick : to.name, ',', nick, ')');
+  log.debug('whois(', nick, ',', wp, ')');
   var resolved_nick = db.get(nick, nick);
   if (resolved_nick == nick) db.set(nick, nick); // store this nick for wp command
   event.reply('\'' + client.format.get('bold', event.network) + nick + client.format.get('bold', event.network) + '\' is \'' + client.format.get('bold', event.network) + resolved_nick + client.format.get('bold', event.network) + '\' on last.fm: http://last.fm/user/' + resolved_nick);
 }
 
 function compare(event, nick1, nick2) {
-  log.debug('compare(', to, ',', nick1, ',', nick2, ')');
+  log.debug('compare(', nick1, ',', nick2, ')');
   compareUsers(event, db.get(nick1, nick1), db.get(nick2, nick2), function(msg) {
     event.reply(msg);
   });
 }
 
-client.on('message', function(err, event) {
-    if (event.message.match(/\(np\)/g) || event.message.match(/lastfm:np/g)) np(event, event.user.nick);
-    if (network_config[event.network] && network_config[event.network].prefix && (event.message.substr(0, 1) == network_config[event.network].prefix)) {
-    var args = event.message.trim().substr(1).split(' ');
+client.on('message', function (event) {
+    if (event.message.match(/\(np\)/g) || event.message.match(/lastfm:np/g)) np(event.channel, event.user.nick);
+});
 
-    // user commands
-    switch (args[0]) {
-      case 'source':
-      case 'version':
-        event.reply('node-np v' + VERSION + ' (standalone last.fm bot written in node.js) - Source: https://github.com/omnidan/node-np');
-        break;
-      case 'issue':
-      case 'issues':
-      case 'bug':
-        event.reply('Please file issue requests here: https://github.com/omnidan/node-np/issues');
-        break;
-      case 'strip':
-        event.reply('*takes off its clothes* I\'m running on node v' + process.versions.node + ' with v8 v' + process.versions.v8);
-        break;
-      case 'setuser':
-        if (args.length > 1) {
-          db.set(event.user.nick, args[1]);
-          db.flush();
-          event.reply('\'' + client.format.get('bold', event.network) + event.user.nick + client.format.get('bold', event.network) + '\' is now associated with http://last.fm/user/' + args[1]); // TODO: check if last.fm user exists?
-        } else {
-          event.reply(network_config[event.network].prefix + 'setuser needs a last.fm username');
-        }
-        break;
-      case 'help':
-        event.reply('I am a last.fm bot. Use "' + client.format.get('bold', event.network) + network_config[event.network].prefix + 'setuser LAST_FM_NICK' + client.format.get('bold', event.network) +
-          '" to associate your irc nick with your last.fm account. Then run "' + client.format.get('bold', event.network) + network_config[event.network].prefix + 'np' + client.format.get('bold', event.network) + '"');
-        break;
-      case 'np':
-        if (args.length > 1) {
-          np(event, args[1]);
-        } else {
-          np(event, event.user.nick);
-        }
-        break;
-      case 'wp':
-        isAdmin(event, function (admin) {
-          if (admin) {
-            var dbdump = db.dumpRaw();
-            for (var key in db.dumpRaw()) {
-              np(event, key, true);
-            }
+client.on('command', function (event) {
+  switch (event.cmd) {
+    case 'source':
+    case 'version':
+      event.reply('node-np v' + VERSION + ' (standalone last.fm bot written in node.js) - Source: https://github.com/omnidan/node-np');
+      break;
+    case 'issue':
+    case 'issues':
+    case 'bug':
+      event.reply('Please file issue requests here: https://github.com/omnidan/node-np/issues');
+      break;
+    case 'strip':
+      event.reply('*takes off its clothes* I\'m running on node v' + process.versions.node + ' with v8 v' + process.versions.v8);
+      break;
+    case 'setuser':
+      if (event.args.length > 0) {
+        db.set(event.user.nick, event.args[0]);
+        db.flush();
+        event.reply('\'' + client.format.get('bold', event.network) + event.user.nick + client.format.get('bold', event.network) + '\' is now associated with http://last.fm/user/' + event.args[0]); // TODO: check if last.fm user exists?
+      } else {
+        event.reply(network_config[event.network].prefix + 'setuser needs a last.fm username');
+      }
+      break;
+    case 'help':
+      event.reply('I am a last.fm bot. Use "' + client.format.get('bold', event.network) + network_config[event.network].prefix + 'setuser LAST_FM_NICK' + client.format.get('bold', event.network) +
+        '" to associate your irc nick with your last.fm account. Then run "' + client.format.get('bold', event.network) + network_config[event.network].prefix + 'np' + client.format.get('bold', event.network) + '"');
+      break;
+    case 'np':
+      if (event.args.length > 0) {
+        np(event, event.args[0]);
+      } else {
+        np(event, event.user.nick);
+      }
+      break;
+    case 'wp':
+      isAdmin(event, function (admin) {
+        if (admin) {
+          var dbdump = db.dumpRaw();
+          for (var key in db.dumpRaw()) {
+            np(event, event.user, key, true);
           }
-        });
-        break;
-      case 'whois':
-        if (args.length > 1) {
-          whois(event, args[1]);
-        } else {
-          whois(event, event.user.nick);
         }
-        break;
-      case 'wwhois':
-        isAdmin(event, function (admin) {
-          if (admin) {
-            event.reply(event.user.nick + ' ;)');
-            var dbdump = db.dumpRaw();
-            for (var key in db.dumpRaw()) {
-              whois(event.user, key, true);
-            }
+      });
+      break;
+    case 'whois':
+      if (event.args.length > 0) {
+        whois(event, event.args[0]);
+      } else {
+        whois(event, event.user.nick);
+      }
+      break;
+    case 'wwhois':
+      isAdmin(event, function (admin) {
+        if (admin) {
+          event.reply(event.user.nick + ' ;)');
+          var dbdump = db.dumpRaw();
+          for (var key in db.dumpRaw()) {
+            whois(event, event.user, key, true);
           }
-        });
-        break;
-      case 'compare':
-        if (args.length > 2) {
-          compare(event, args[1], args[2]);
-        } else if (args.length > 1) {
-          compare(event, event.user.nick, args[1]);
-        } else {
-          event.reply('Use "' + client.format.get('bold', event.network) + network_config[event.network].prefix + 'compare NICK' + client.format.get('bold', event.network) +
-            '" or "' + client.format.get('bold', event.network) + network_config[event.network].prefix + 'compare NICK1 NICK2' + client.format.get('bold', event.network) + '"');
         }
-        break;
-      case 'join': // join #channel (network) (nostore), join #channel (nostore)
-        // TODO: move to function, allow in PM too
-        isAdmin(event, function (admin) {
-          if (args.length > 2) {
-            event.reply('Not implemented yet.'); // TODO: get network from coffea and set to network
-          } else if (args.length > 1) {
-            client.join(args[1], event.network);
-            if (!args[3]) {
-              // TODO: store channel in config
-            }
-          } else {
-            event.reply('Use "' + client.format.get('bold', event.network) + network_config[event.network].prefix + 'join #CHANNEL' + client.format.get('bold', event.network) +
-              '" or "' + client.format.get('bold', event.network) + network_config[event.network].prefix + 'join #CHANNEL NETWORK' + client.format.get('bold', event.network) + '"');
-          }
-        });
-        break;
-      case 'part': // part #channel (network) (nostore), part #channel (nostore)
-        // TODO: move to function, allow in PM too
-        isAdmin(event, function (admin) {
-          if (args.length > 2) {
-            event.reply('Not implemented yet.'); // TODO: get network from coffea and set to network
-          } else if (args.length > 1) {
-            client.part(args[1], event.network);
-            if (!args[3]) {
-              // TODO: store channel in config
-            }
-          } else {
-            event.reply('Use "' + client.format.get('bold', event.network) + network_config[event.network].prefix + 'part #CHANNEL' + client.format.get('bold', event.network) +
-              '" or "' + client.format.get('bold', event.network) + network_config[event.network].prefix + 'part #CHANNEL NETWORK' + client.format.get('bold', event.network) + '"');
-          }
-        });
-        break;
-      case 'connect': // connect name network (port) (ssl) (nostore), connect network (port) (ssl) (nostore)
-        break;
-      case 'disconnect': // disconnect name (nostore)
-        break;
-    }
+      });
+      break;
+    case 'compare':
+      if (event.args.length > 1) {
+        compare(event, event.args[0], event.args[1]);
+      } else if (event.args.length > 0) {
+        compare(event, event.user.nick, event.args[0]);
+      } else {
+        event.reply('Use "' + client.format.get('bold', event.network) + network_config[event.network].prefix + 'compare NICK' + client.format.get('bold', event.network) +
+          '" or "' + client.format.get('bold', event.network) + network_config[event.network].prefix + 'compare NICK1 NICK2' + client.format.get('bold', event.network) + '"');
+      }
+      break;
+    case 'join': // join #channel (network) (nostore), join #channel (nostore)
+      // TODO: move to function, allow in PM too
+      isAdmin(event, function (admin) {
+        if (event.args.length > 1) {
+          event.reply('Not implemented yet.'); // TODO: get network from coffea and set to network
+        } else if (event.args.length > 0) {
+          client.join(event.args[0]);
+          // if (!event.args[2]) {
+            // TODO: store channel in config
+          // }
+        } else {
+          event.reply('Use "' + client.format.get('bold', event.network) + network_config[event.network].prefix + 'join #CHANNEL' + client.format.get('bold', event.network) +
+            '" or "' + client.format.get('bold', event.network) + network_config[event.network].prefix + 'join #CHANNEL NETWORK' + client.format.get('bold', event.network) + '"');
+        }
+      });
+      break;
+    case 'part': // part #channel (network) (nostore), part #channel (nostore)
+      // TODO: move to function, allow in PM too
+      isAdmin(event, function (admin) {
+        if (event.args.length > 1) {
+          event.reply('Not implemented yet.'); // TODO: get network from coffea and set to network
+        } else if (event.args.length > 0) {
+          client.part(event.args[0]);
+          // if (!event.args[2]) {
+            // TODO: store channel in config
+          // }
+        } else {
+          event.reply('Use "' + client.format.get('bold', event.network) + network_config[event.network].prefix + 'part #CHANNEL' + client.format.get('bold', event.network) +
+            '" or "' + client.format.get('bold', event.network) + network_config[event.network].prefix + 'part #CHANNEL NETWORK' + client.format.get('bold', event.network) + '"');
+        }
+      });
+      break;
+    case 'connect': // connect name network (port) (ssl) (nostore), connect network (port) (ssl) (nostore)
+      break;
+    case 'disconnect': // disconnect name (nostore)
+      break;
   }
 });
