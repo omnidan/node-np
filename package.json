@@ -20,7 +20,7 @@
     "np": "./main.js"
   },
   "dependencies": {
-    "coffea": "^0.4.17",
+    "coffea": "^0.4.19",
     "lastfm": "^0.9.2",
     "log-simple": "^0.1.3"
   },

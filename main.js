@@ -2,7 +2,7 @@
 
 var log = require('log-simple')();
 
-var VERSION = '0.5.12';
+var VERSION = '0.5.13';
 /* TODO
  * Connect to new networks, join channels, etc.. without restarting (+0.1.0)
  * Better NPM integration, publish on NPM (+0.0.1)
@@ -270,7 +270,7 @@ function getRecentTrack(event, nick, callback) {
                 if (!data || !data.track) {
                   return callback('last.fm api error - getRecentTrack/user.getRecentTracks: data.track undefined');
                 }
-                
+
                 data.track.date = date;
                 data.track.now_playing = now_playing;
 
@@ -426,7 +426,7 @@ client.on('command', function (event) {
   switch (event.cmd) {
     case 'source':
     case 'version':
-      event.reply('node-np v' + VERSION + ' (standalone last.fm bot written in node.js) - Source: https://github.com/omnidan/node-np');
+      event.reply('node-np v' + VERSION + ' (standalone last.fm bot written in node.js) - coffea v' + client.version + ' - Source: https://github.com/omnidan/node-np');
       break;
     case 'issue':
     case 'issues':
