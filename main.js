@@ -2,7 +2,7 @@
 
 var log = require('log-simple')();
 
-var VERSION = '0.5.13';
+var VERSION = '0.5.14';
 /* TODO
  * Connect to new networks, join channels, etc.. without restarting (+0.1.0)
  * Better NPM integration, publish on NPM (+0.0.1)
@@ -419,7 +419,7 @@ function compare(event, nick1, nick2) {
 
 
 client.on('message', function (event) {
-    if (event.message.match(/\(np\)/g) || event.message.match(/lastfm:np/g)) np(event.channel, event.user.nick);
+    if (event.message.match(/\(np\)/g) || event.message.match(/lastfm:np/g)) np(event, event.user.nick);
 });
 
 client.on('command', function (event) {
